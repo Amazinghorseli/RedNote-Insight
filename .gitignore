@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# 环境变量
+.env
+
+# 测试与临时文件
+test_*.py
+sample_data.csv
+*_test.csv
+*.log
+
+# 数据目录 — 向量库不追踪
+data/chroma_db/
+
+# IDE
+.vscode/
+.idea/
+
+# 系统
+.DS_Store
+Thumbs.db

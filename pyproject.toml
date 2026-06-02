@@ -1,0 +1,23 @@
+[project]
+name = "xiaohongshu-insight"
+version = "0.3.0"
+description = "小红书评论区需求挖掘引擎 — 从评论区自动提取未被满足的用户需求"
+requires-python = ">=3.10"
+
+dependencies = [
+    "langchain>=0.3",
+    "langchain-community>=0.3",
+    "langchain-openai>=0.2",
+    "langchain-chroma>=0.2",
+    "langchain-text-splitters>=0.3",
+    "chromadb>=0.5",
+    "rank-bm25>=0.2",
+    "jieba>=0.42",
+    "sentence-transformers>=3.0",
+    "python-dotenv>=1.0",
+    "langgraph>=0.2.0",
+    "streamlit>=1.40",
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    "pyyaml>=6.0",
+]
