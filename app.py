@@ -1,5 +1,5 @@
 """
-app.py - 小红书选品助手（Streamlit 入口）
+app.py - 小红书爆款雷达（Streamlit 入口）
 Phase 1: 基础 RAG 问答
 Phase 3: 评论区需求挖掘洞察模式
 Phase 4: 查询时自动抓取 — 知识库没有就现场生成
@@ -10,8 +10,8 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-st.set_page_config(page_title="小红书选品助手", page_icon="🔍", layout="wide")
-st.title("🔍 小红书评论区需求挖掘引擎")
+st.set_page_config(page_title="小红书爆款雷达", page_icon="🎯", layout="wide")
+st.title("🎯 小红书爆款雷达")
 st.markdown("---")
 
 
@@ -365,4 +365,4 @@ else:
 
 # ---- 底部 ----
 st.markdown("---")
-st.caption(f"v0.3 · 问答 + 洞察 + 自动抓取 · 数据版本 {st.session_state.data_version}")
+st.caption(f"🎯 小红书爆款雷达 v0.3 · 问答 + 洞察 + 自动抓取 · 数据版本 {st.session_state.data_version}")

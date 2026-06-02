@@ -1,6 +1,6 @@
-# 🔍 小红书评论区需求挖掘引擎
+# 🎯 小红书爆款雷达
 
-**从评论区自动提取未被满足的用户需求，赋能选品决策。**
+**翻评论、找痛点、定方向——让 AI 帮你从评论区挖出下一个爆款。**
 
 <p align="center">
   <img src="https://img.shields.io/badge/LangGraph-1.0-blue" alt="LangGraph"/>
@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <b>⚠️ 知识库里没有「健身服」？没关系——现场生成，即时分析。</b>
+  <b>🎯 不再凭感觉选品——输入品类，AI 替你翻十万评论、找痛点、定方向</b>
 </p>
 
 ---
@@ -49,14 +49,14 @@
 
 ## 💡 为什么你需要这个
 
-做电商选品的人都知道：**真正的需求藏在评论区里**。
+做电商选品的人都知道：**爆款的线索藏在评论区里**。
 
 但小红书上几百条评论、几十篇笔记，人工翻一遍要花半天。而且：
-- 评论里的"尺寸太小了""续航不够""胶贴不稳"散落在各处，难以汇总
-- 你有真实笔记数据，但没有工具做分析
-- 你想调研一个新品类，但手头没有数据
+- "尺寸太小""续航不够""胶贴不稳"——痛点散落在各处，难以汇总
+- 你有笔记数据，但缺一把"放大镜"
+- 你想调研新品类，但手头没数据
 
-这个项目解决的就是这三层问题——**检索 → 聚合 → 洞察**，一键出报告。
+这个项目把选品流程压缩成三个动作：**检索 → 聚合 → 洞察**，一键出报告。
 
 ---
 
@@ -148,8 +148,8 @@ python import_data.py --input my_data.csv --enrich
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/your-username/xiaohongshu-insight.git
-cd xiaohongshu-insight
+git clone https://github.com/your-username/RedNote-Insight.git
+cd RedNote-Insight
 
 # 2. 配置 API Key
 cp .env.example .env
@@ -225,7 +225,7 @@ uv run streamlit run app.py
 ## 📁 项目结构
 
 ```
-xiaohongshu-insight/
+RedNote-Insight/
 │
 ├── app.py                    # 🖥️  Streamlit 主入口（问答 + 洞察双模式）
 ├── generate_data.py          # 📝  模拟笔记数据生成器（离线用）
@@ -400,5 +400,5 @@ MIT © 2026 — 使用、修改、商用均自由。
 ---
 
 <p align="center">
-  <sub>如果这个项目帮到了你，请给个 ⭐ Star 支持一下</sub>
+  <sub>如果这个项目帮到了你，给个 ⭐ Star — 让更多选品人看见它</sub>
 </p>

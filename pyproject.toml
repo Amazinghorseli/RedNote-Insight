@@ -1,7 +1,7 @@
 [project]
-name = "xiaohongshu-insight"
+name = "rednote-insight"
 version = "0.3.0"
-description = "小红书评论区需求挖掘引擎 — 从评论区自动提取未被满足的用户需求"
+description = "小红书爆款雷达 — 翻评论、找痛点、定方向，用 AI 从评论区挖出下一个爆款"
 requires-python = ">=3.10"
 
 dependencies = [
