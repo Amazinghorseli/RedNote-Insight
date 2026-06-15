@@ -101,8 +101,9 @@ st.success(f"✅ 知识库就绪 · {state['total_chunks']} 个文本块")
 # 侧边栏
 # ============================================================
 with st.sidebar:
-    mode = st.radio("运行模式", ["问答模式", "洞察模式"], index=0)
+    mode = st.radio("运行模式", ["问答模式", "洞察模式", "🕷️ 抓取数据"], index=0)
     st.caption(f"📊 {state['total_chunks']} 个 chunk 已就绪")
+    st.caption("🕷️ 抓取模式仅限本地使用，首次需扫码登录")
 
 # ============================================================
 # 洞察管道
@@ -203,7 +204,7 @@ if mode == "问答模式":
 # ============================================================
 # 洞察模式
 # ============================================================
-else:
+elif mode == "洞察模式":
     st.subheader("📊 选品洞察")
 
     if "is_msgs" not in st.session_state:
@@ -222,3 +223,59 @@ else:
                 report = run_insight(q, s)
                 st.markdown(report)
         st.session_state.is_msgs.append({"role": "assistant", "content": report})
+
+# ============================================================
+# 抓取模式
+# ============================================================
+else:
+    st.subheader("🕷️ 真实数据抓取")
+    st.caption("打开浏览器抓取小红书真实笔记和评论。首次使用需扫码登录。")
+
+    category = st.text_input("品类名称", placeholder="例如：健身服、蓝牙耳机、磁吸感应灯")
+    col1, col2 = st.columns(2)
+    with col1:
+        count = st.number_input("抓取篇数", min_value=5, max_value=100, value=30)
+    with col2:
+        with_comments = st.checkbox("同时抓评论", value=True)
+
+    if st.button("🚀 开始抓取", type="primary", disabled=not category):
+        log_area = st.empty()
+        progress_bar = st.progress(0)
+
+        try:
+            from src.real_crawler import XHSCrawler
+            log_area.info(f"🕷️ 正在打开浏览器搜索「{category}」...")
+
+            crawler = XHSCrawler()
+            saved = crawler.crawl(category, count=count, with_comments=with_comments)
+            crawler.close()
+
+            if saved > 0:
+                # 增量入库
+                from src.ingestion import incremental_ingest, rebuild_all_chunks
+                incremental_ingest(state["raw_dir"], state["vectorstore"])
+                chunks = rebuild_all_chunks(state["raw_dir"])
+                from rank_bm25 import BM25Okapi
+                import jieba
+                tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
+                state["bm25"] = BM25Okapi(tokenized)
+                state["chunks"] = chunks
+                state["total_chunks"] = len(chunks)
+                from src.retrievers import HybridRetriever
+                hr = HybridRetriever(state["vectorstore"], chunks)
+                state["hybrid_retriever"] = hr
+                def bms(q2, k=3):
+                    scores = state["bm25"].get_scores(list(jieba.cut(q2)))
+                    return [chunks[i] for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]]
+                state["bm25_search"] = bms
+                from src.graph import build_graph
+                state["graph"] = build_graph(state["vectorstore"], bms, hr, reranker=state["reranker"])
+
+                log_area.success(f"✅ 完成！已抓取 {saved} 篇「{category}」笔记，知识库已更新。")
+                progress_bar.progress(100)
+            else:
+                log_area.error("❌ 未抓取到任何笔记。请检查网络或重新登录。")
+        except Exception as e:
+            log_area.error(f"❌ 抓取出错: {e}")
+            import traceback
+            st.code(traceback.format_exc())
