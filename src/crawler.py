@@ -178,23 +178,24 @@ class RealCrawler(BaseCrawler):
 class CrawlerInterface:
     """
     爬虫统一接口。
-    Phase 1 自动使用 LLM 生成，Phase 2 检测到真实爬虫可用时自动切换。
+    优先使用真实爬虫（如果可用），否则降级为 LLM 生成。
     """
 
     def __init__(self, raw_dir: str):
         self.raw_dir = raw_dir
-        self._real = RealCrawler()
-        self._generator = LLMGeneratorCrawler(raw_dir)
-
-        # Phase 1: 仅 LLM 生成
         self._active = "generated"
 
-        # Phase 2: 自动检测
-        # if self._real.is_available():
-        #     self._active = "real"
-        #     print("[Crawler] ✅ 真实爬虫已就绪")
-        # else:
-        #     print("[Crawler] ⚠ 真实爬虫未就绪，使用 LLM 生成")
+        # Phase 2: 尝试使用真实爬虫
+        try:
+            from src.real_crawler import XHSCrawler
+            self._real = XHSCrawler()
+            self._active = "real"
+            print("[Crawler] ✅ 真实爬虫已就绪")
+        except Exception as e:
+            print(f"[Crawler] ⚠ 真实爬虫不可用 ({e})，降级为 LLM 生成")
+            self._real = None
+
+        self._generator = LLMGeneratorCrawler(raw_dir)
 
     def is_real(self) -> bool:
         return self._active == "real"

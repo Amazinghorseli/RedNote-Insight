@@ -403,29 +403,14 @@ async def run_evaluation(req: EvaluateRequest):
 
 @app.post("/api/crawl")
 async def trigger_crawl(req: CrawlRequest):
-    """触发真实数据抓取（Phase 2）"""
+    """触发数据抓取 — 优先使用真实爬虫，不可用时降级为 LLM 生成"""
     from src.crawler import CrawlerInterface
     crawler = CrawlerInterface(raw_dir=_runtime["raw_dir"])
 
-    if crawler.is_real():
-        result = crawler.crawl(req.category, req.count)
-        if result["count"] > 0:
-            # 增量入库
-            from src.ingestion import incremental_ingest, rebuild_all_chunks
-            incremental_ingest(_runtime["raw_dir"], _runtime["vectorstore"])
-            chunks = rebuild_all_chunks(_runtime["raw_dir"])
-            from rank_bm25 import BM25Okapi
-            import jieba
-            tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
-            _runtime["bm25"] = BM25Okapi(tokenized)
-            _runtime["chunks"] = chunks
-        return JSONResponse(content={"success": True, "method": "real", "count": result["count"], "details": result.get("details", [])})
-    else:
-        # Phase 1: 使用 LLM 生成（旧逻辑）
-        from src.fetcher import OnDemandFetcher
-        fetcher = OnDemandFetcher(raw_dir=_runtime["raw_dir"])
-        count = fetcher.fetch(req.category, req.count)
+    result = crawler.crawl(req.category, req.count)
 
+    if result["count"] > 0:
+        # 增量入库 + 重建索引
         from src.ingestion import incremental_ingest, rebuild_all_chunks
         incremental_ingest(_runtime["raw_dir"], _runtime["vectorstore"])
         chunks = rebuild_all_chunks(_runtime["raw_dir"])
@@ -434,13 +419,15 @@ async def trigger_crawl(req: CrawlRequest):
         tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
         _runtime["bm25"] = BM25Okapi(tokenized)
         _runtime["chunks"] = chunks
+        _runtime["stats"]["total_chunks"] = len(chunks)
+        _runtime["stats"]["total_notes"] = len(os.listdir(_runtime["raw_dir"]))
 
-        return JSONResponse(content={
-            "success": True,
-            "method": "generated",
-            "count": count,
-            "message": "Phase 1 使用 LLM 生成数据。Phase 2 将接入真实爬虫。",
-        })
+    return JSONResponse(content={
+        "success": result["count"] > 0,
+        "method": result["method"],
+        "count": result["count"],
+        "message": f"抓取完成: {result['count']} 篇" if result["count"] > 0 else "抓取失败",
+    })
 
 
 # ============================================================

@@ -112,9 +112,9 @@ def run_insight(query: str, status_placeholder=None) -> str:
     from src.agents.demand_agent import DemandAggregator
     from src.agents.insight_agent import InsightGenerator
     from src.config import RERANKER_THRESHOLD
-    from src.fetcher import OnDemandFetcher
+    from src.crawler import CrawlerInterface
 
-    MIN_NOTES = 10  # Streamlit Cloud 上降低阈值，加快响应
+    MIN_NOTES = 10
     hr = state["hybrid_retriever"]
     reranker = state["reranker"]
     raw_dir = state["raw_dir"]
@@ -143,9 +143,10 @@ def run_insight(query: str, status_placeholder=None) -> str:
         return _do_insight(relevant, query)
     else:
         if status_placeholder:
-            status_placeholder.info(f"数据不足（{len(relevant)} 篇），正在自动生成...")
-        fetcher = OnDemandFetcher(raw_dir=raw_dir)
-        count = fetcher.fetch(query, count=10)
+            status_placeholder.info(f"数据不足（{len(relevant)} 篇），正在自动抓取...")
+        crawler = CrawlerInterface(raw_dir=raw_dir)
+        result = crawler.crawl(query, count=15)
+        count = result["count"]
         if count == 0:
             return f"无法获取「{query}」的数据。"
         # 增量入库
