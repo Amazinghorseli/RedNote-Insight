@@ -1,36 +1,41 @@
 """
 streamlit_app.py — Streamlit Cloud 部署入口
 ============================================
-Streamlit Cloud 需要根目录有一个 streamlit_app.py。
-保留原有功能，同时可作为 Streamlit Community Cloud 免费部署。
-
-部署步骤:
-  1. Push 到 GitHub
-  2. 在 share.streamlit.io 连接仓库
-  3. 设置 secrets:
+在 Streamlit Cloud 上部署，需要：
+  1. 在 app settings → Secrets 中设置:
      OPENAI_API_KEY = "sk-xxx"
      OPENAI_BASE_URL = "https://api.siliconflow.cn/v1"
+     (LLM_MODEL, EMBEDDING_MODEL, RERANKER_MODEL 有默认值，可选)
+  2. 确保项目根目录有 app.py 和 data/raw/*.md
+
+本地也能运行: streamlit run streamlit_app.py
 """
-import sys
 import os
+import sys
 
-# 如果 Streamlit Cloud 检测到 secrets，写入 .env
-if not os.path.exists(".env"):
-    try:
-        import streamlit as st
-        if hasattr(st, "secrets"):
-            with open(".env", "w", encoding="utf-8") as f:
-                for key in ["OPENAI_API_KEY", "OPENAI_BASE_URL", "LLM_MODEL",
-                           "EMBEDDING_MODEL", "RERANKER_MODEL"]:
-                    if key in st.secrets:
-                        f.write(f"{key}={st.secrets[key]}\n")
-    except Exception:
-        pass
+# ============================================================
+# 关键：在 import 任何项目模块之前，从 st.secrets 注入环境变量
+# config.py 通过 os.getenv() 读取，所以必须提前设置
+# ============================================================
+try:
+    import streamlit as st
+    if hasattr(st, "secrets"):
+        # 将 Streamlit Secrets 注入到 os.environ
+        secret_keys = [
+            "OPENAI_API_KEY", "OPENAI_BASE_URL",
+            "LLM_MODEL", "EMBEDDING_MODEL", "RERANKER_MODEL",
+        ]
+        for key in secret_keys:
+            if key in st.secrets and key not in os.environ:
+                os.environ[key] = st.secrets[key]
+                print(f"[streamlit_app] Loaded secret: {key}")
+except Exception as e:
+    print(f"[streamlit_app] Secrets not loaded: {e}")
 
-# 直接复用原有 Streamlit 入口
+# 确保能导入项目模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# 安全导入 — 如果 app.py 不存在，回退到 FastAPI
+# 直接复用原有 Streamlit 入口
 try:
     import app
 except ImportError:
