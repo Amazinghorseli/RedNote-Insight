@@ -14,13 +14,18 @@ sample_data.csv
 *_test.csv
 *.log
 
-# 数据目录 — 向量库不追踪
+# Data directory — don't track vector DB
 data/chroma_db/
 
 # IDE
 .vscode/
 .idea/
 
-# 系统
+# OS
 .DS_Store
 Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
+*.pyc
+__pycache__/

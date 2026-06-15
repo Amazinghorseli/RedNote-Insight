@@ -837,6 +837,22 @@ wheels = [
 ]
 
 [[package]]
+name = "fastapi"
+version = "0.137.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "annotated-doc" },
+    { name = "pydantic" },
+    { name = "starlette" },
+    { name = "typing-extensions" },
+    { name = "typing-inspection" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/fe/fb25c287ff7e0f79fc6acf2e8b812725dad28d2a1446c0410bab1422ac90/fastapi-0.137.0.tar.gz", hash = "sha256:d0565d551f65a803ecff245390840867186f456ef98971f750724eed16e1541c", size = 408023, upload-time = "2026-06-14T12:51:30.672Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e7/f1/b38481428e50131e5345b535414d11d196f14990122fe69c9020c64e5683/fastapi-0.137.0-py3-none-any.whl", hash = "sha256:6dcbde8d464f92117c1accb9e42720f8e423fa9b86cb563b1f5862f785a06498", size = 121777, upload-time = "2026-06-14T12:51:29.067Z" },
+]
+
+[[package]]
 name = "filelock"
 version = "3.29.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3902,6 +3918,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "chromadb" },
     { name = "datasets" },
+    { name = "fastapi" },
     { name = "jieba" },
     { name = "langchain" },
     { name = "langchain-chroma" },
@@ -3919,12 +3936,14 @@ dependencies = [
     { name = "rank-bm25" },
     { name = "sentence-transformers" },
     { name = "streamlit" },
+    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "chromadb", specifier = ">=0.5" },
     { name = "datasets", specifier = ">=5.0.0" },
+    { name = "fastapi", specifier = ">=0.115.0" },
     { name = "jieba", specifier = ">=0.42" },
     { name = "langchain", specifier = ">=0.3" },
     { name = "langchain-chroma", specifier = ">=0.2" },
@@ -3941,6 +3960,7 @@ requires-dist = [
     { name = "rank-bm25", specifier = ">=0.2" },
     { name = "sentence-transformers", specifier = ">=3.0" },
     { name = "streamlit", specifier = ">=1.40" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
 ]
 
 [[package]]

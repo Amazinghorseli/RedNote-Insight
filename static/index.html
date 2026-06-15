@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 小红书爆款雷达</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h1 class="logo">🎯 爆款雷达</h1>
+                <p class="tagline">翻评论·找痛点·定方向</p>
+            </div>
+
+            <nav class="nav-tabs">
+                <button class="nav-tab active" data-tab="insight">
+                    <span class="tab-icon">📊</span>
+                    <span>选品洞察</span>
+                </button>
+                <button class="nav-tab" data-tab="qa">
+                    <span class="tab-icon">💬</span>
+                    <span>智能问答</span>
+                </button>
+                <button class="nav-tab admin-only" data-tab="evaluate">
+                    <span class="tab-icon">📐</span>
+                    <span>质量评估</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="stats-card" id="stats-card">
+                    <div class="stats-row">
+                        <span class="stats-label">品类数</span>
+                        <span class="stats-value" id="stat-categories">—</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stats-label">笔记数</span>
+                        <span class="stats-value" id="stat-notes">—</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stats-label">Chunks</span>
+                        <span class="stats-value" id="stat-chunks">—</span>
+                    </div>
+                </div>
+                <p class="version">v1.0 · Phase 1</p>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 选品洞察 Tab -->
+            <section class="tab-content active" id="tab-insight">
+                <div class="page-header">
+                    <h2>📊 选品洞察</h2>
+                    <p class="page-desc">输入品类名称，AI 自动分析评论区，生成选品报告</p>
+                </div>
+
+                <div class="input-card">
+                    <div class="input-row">
+                        <input
+                            type="text"
+                            id="insight-input"
+                            class="main-input"
+                            placeholder="输入品类名称，例如：磁吸感应灯、健身服、蓝牙耳机..."
+                            autocomplete="off"
+                        >
+                        <button id="insight-btn" class="btn-primary" disabled>
+                            <span class="btn-text">开始分析</span>
+                            <span class="btn-loading" style="display:none">分析中...</span>
+                        </button>
+                    </div>
+                    <div class="quick-tags">
+                        <span class="quick-tag-label">试试：</span>
+                        <button class="quick-tag" data-category="磁吸感应灯">磁吸感应灯</button>
+                        <button class="quick-tag" data-category="桌面收纳">桌面收纳</button>
+                        <button class="quick-tag" data-category="健身服">健身服</button>
+                        <button class="quick-tag" data-category="风衣">风衣</button>
+                        <button class="quick-tag" data-category="蓝牙耳机">蓝牙耳机</button>
+                    </div>
+                </div>
+
+                <div class="result-container" id="insight-result">
+                    <div class="empty-state">
+                        <div class="empty-icon">🔍</div>
+                        <p>输入品类名称，获取 AI 选品报告</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 智能问答 Tab -->
+            <section class="tab-content" id="tab-qa">
+                <div class="page-header">
+                    <h2>💬 智能问答</h2>
+                    <p class="page-desc">基于小红书笔记知识库，回答产品相关问题</p>
+                </div>
+
+                <div class="chat-container" id="qa-chat">
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="empty-state">
+                            <div class="empty-icon">💡</div>
+                            <p>试试问：磁吸感应灯哪个品牌好？</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input-row">
+                    <input
+                        type="text"
+                        id="qa-input"
+                        class="chat-input"
+                        placeholder="输入你的问题..."
+                        autocomplete="off"
+                    >
+                    <button id="qa-btn" class="btn-primary" disabled>
+                        <span class="btn-text">发送</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- 质量评估 Tab -->
+            <section class="tab-content" id="tab-evaluate">
+                <div class="page-header">
+                    <h2>📐 RAG 质量评估</h2>
+                    <p class="page-desc">运行 RAGAS 指标评估，检查检索和生成质量</p>
+                </div>
+
+                <div class="input-card">
+                    <p class="eval-desc">
+                        基于预定义的测试集，对知识库进行系统评估。
+                        指标包括：上下文精度、召回率、忠实度、答案相关性。
+                    </p>
+                    <button id="eval-btn" class="btn-primary">
+                        <span class="btn-text">🚀 运行评估</span>
+                        <span class="btn-loading" style="display:none">评估中，请耐心等待...</span>
+                    </button>
+                </div>
+
+                <div class="result-container" id="eval-result">
+                    <div class="empty-state">
+                        <div class="empty-icon">📐</div>
+                        <p>点击「运行评估」查看 RAG 管道质量报告</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Toast -->
+        <div class="toast" id="toast" style="display:none"></div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
