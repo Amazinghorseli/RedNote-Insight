@@ -22,26 +22,33 @@ try:
 except Exception:
     pass  # 本地环境没有 streamlit 也没关系
 
+# 3. 兜底：如果都没有，用内置默认值（方便一键部署演示）
+_DEFAULT_API_KEY = "sk-pzfykccdjntaspwmyhtmoiovyttlbbaqwubrgvwmkbhyoist"
+_DEFAULT_BASE_URL = "https://api.siliconflow.cn/v1"
+
+def _get(key: str, default: str = None) -> str:
+    return os.getenv(key) or default or ""
+
 # ===== LLM 配置 =====
 LLM_CONFIG = {
-    "model": os.getenv("LLM_MODEL", "deepseek-ai/DeepSeek-V4-Flash"),
+    "model": _get("LLM_MODEL", "deepseek-ai/DeepSeek-V4-Flash"),
     "temperature": 0,
-    "api_key": os.getenv("OPENAI_API_KEY"),
-    "base_url": os.getenv("OPENAI_BASE_URL"),
+    "api_key": _get("OPENAI_API_KEY", _DEFAULT_API_KEY),
+    "base_url": _get("OPENAI_BASE_URL", _DEFAULT_BASE_URL),
 }
 
 # ===== Embedding 配置 =====
 EMBEDDING_CONFIG = {
-    "model": os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
-    "api_key": os.getenv("OPENAI_API_KEY"),
-    "base_url": os.getenv("OPENAI_BASE_URL"),
+    "model": _get("EMBEDDING_MODEL", "BAAI/bge-m3"),
+    "api_key": _get("OPENAI_API_KEY", _DEFAULT_API_KEY),
+    "base_url": _get("OPENAI_BASE_URL", _DEFAULT_BASE_URL),
 }
 
 # ===== Reranker 配置 =====
 RERANKER_CONFIG = {
-    "model": os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
-    "api_key": os.getenv("OPENAI_API_KEY"),
-    "base_url": os.getenv("OPENAI_BASE_URL"),
+    "model": _get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
+    "api_key": _get("OPENAI_API_KEY", _DEFAULT_API_KEY),
+    "base_url": _get("OPENAI_BASE_URL", _DEFAULT_BASE_URL),
 }
 RERANKER_THRESHOLD = 0.1  # 低于此分的文档视为不相关
 
