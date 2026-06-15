@@ -14,8 +14,9 @@ sample_data.csv
 *_test.csv
 *.log
 
-# Data directory — don't track vector DB
-data/chroma_db/
+# Vector DB index files are small — we COMMIT them so Streamlit Cloud
+# doesn't have to rebuild from scratch (saves 30-60s cold start).
+# Only ignore if it gets too large (>50MB).
 
 # IDE
 .vscode/
