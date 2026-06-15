@@ -1,11 +1,26 @@
 """
 config.py - 统一配置管理
-所有 API Key 和模型配置从 .env 文件读取
+================================
+优先从 Streamlit Secrets 读取（部署环境），
+其次从 .env 文件读取（本地开发），
+最后使用默认值。
 """
 import os
 from dotenv import load_dotenv
 
+# 1. 先尝试从 .env 文件加载（本地开发）
 load_dotenv()
+
+# 2. 如果运行在 Streamlit Cloud，从 st.secrets 覆盖（优先级更高）
+try:
+    import streamlit as st
+    if hasattr(st, "secrets"):
+        for key in ["OPENAI_API_KEY", "OPENAI_BASE_URL",
+                     "LLM_MODEL", "EMBEDDING_MODEL", "RERANKER_MODEL"]:
+            if key in st.secrets:
+                os.environ[key] = st.secrets[key]
+except Exception:
+    pass  # 本地环境没有 streamlit 也没关系
 
 # ===== LLM 配置 =====
 LLM_CONFIG = {
