@@ -1,13 +1,18 @@
 ---
 title: "无限回购的桌面好物！均价不超过50"
-author: "小红书用户5422"
+author: "小红书用户7658"
 likes: 215
-comments: 42
-date: 2025-04-13
+comments: 52
+date: 2025-02-06
 brand: "好物分享"
 tags: ['桌面收好物', '好物分享', '小红书爆款']
+price: 48
+cost: 12
+weight: 1.63
+size: "32x22x6cm"
+category_type: "常青款"
+return_rate: 0.1
 ---
-
 整理了一波我无限回购的桌面好物！
 
 清单：
@@ -25,5 +30,14 @@ comment_analysis:
   purchase_intent: ['吸尘器吸力大吗', '书架稳吗']
   comparison_mentions: ['比小米的好看']
   related_brands: ['好物分享', '小米']
-  ask_link_count: 77
+  ask_link_count: 54
+
+ecommerce:
+  profit_margin: 0.75
+  logistics_level: "低"
+  competition_level: "低"
+  entry_difficulty: "中"
+  recommended_for_newbie: False
+  differentiation_opportunity: "功能组合"
+  estimated_monthly_sales: 2051
 -->

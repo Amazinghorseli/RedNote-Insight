@@ -47,6 +47,14 @@ class CommentAnalyzer:
                 "comments_count": frontmatter.get("comments", 0),
                 "tags": frontmatter.get("tags", []),
             }
+            # 电商选品字段（从 frontmatter 提取）
+            record["price"] = frontmatter.get("price", 0)
+            record["cost"] = frontmatter.get("cost", 0)
+            record["weight"] = frontmatter.get("weight", 0)
+            record["size"] = frontmatter.get("size", "")
+            record["category_type"] = frontmatter.get("category_type", "常青款")
+            record["return_rate"] = frontmatter.get("return_rate", 0.05)
+
             # 评论分析数据
             ca = comments.get("comment_analysis", {})
             if ca:
@@ -63,6 +71,26 @@ class CommentAnalyzer:
                 record["comparison_mentions"] = []
                 record["related_brands"] = []
                 record["ask_link_count"] = 0
+
+            # 电商评分数据（从 comment 的 ecommerce 段提取）
+            ec = comments.get("ecommerce", {})
+            if ec:
+                record["profit_margin"] = ec.get("profit_margin", 0)
+                record["logistics_level"] = ec.get("logistics_level", "中")
+                record["competition_level"] = ec.get("competition_level", "中")
+                record["entry_difficulty"] = ec.get("entry_difficulty", "中")
+                record["recommended_for_newbie"] = ec.get("recommended_for_newbie", True)
+                record["differentiation_opportunity"] = ec.get("differentiation_opportunity", "")
+                record["estimated_monthly_sales"] = ec.get("estimated_monthly_sales", 0)
+            else:
+                # 旧数据兜底：从现有数据估算
+                record["profit_margin"] = 0.65
+                record["logistics_level"] = "中"
+                record["competition_level"] = "中"
+                record["entry_difficulty"] = "中"
+                record["recommended_for_newbie"] = True
+                record["differentiation_opportunity"] = ""
+                record["estimated_monthly_sales"] = 0
 
             results.append(record)
 

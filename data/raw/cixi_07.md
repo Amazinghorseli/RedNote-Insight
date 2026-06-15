@@ -1,13 +1,18 @@
 ---
 title: "磁吸感应灯是智商税吗？用了三个月说点真话"
-author: "小红书用户6635"
+author: "小红书用户1188"
 likes: 432
-comments: 97
-date: 2025-03-28
+comments: 74
+date: 2025-05-28
 brand: "几光"
 tags: ['磁吸感好物', '几光', '小红书爆款']
+price: 144
+cost: 48
+weight: 1.59
+size: "18x24x5cm"
+category_type: "常青款"
+return_rate: 0.06
 ---
-
 用了三个月了，说点真实感受。
 
 好的地方：
@@ -29,5 +34,14 @@ comment_analysis:
   purchase_intent: ['性价比高吗', '和其他品牌比呢']
   comparison_mentions: ['比欧普贵但好看']
   related_brands: ['几光', '欧普照明', '德力西']
-  ask_link_count: 99
+  ask_link_count: 92
+
+ecommerce:
+  profit_margin: 0.67
+  logistics_level: "低"
+  competition_level: "高"
+  entry_difficulty: "高"
+  recommended_for_newbie: True
+  differentiation_opportunity: "尺寸优化"
+  estimated_monthly_sales: 1238
 -->

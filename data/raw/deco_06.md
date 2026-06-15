@@ -1,13 +1,18 @@
 ---
 title: "20块以内！能提升幸福感的10个小物件"
-author: "小红书用户4295"
+author: "小红书用户7624"
 likes: 432
-comments: 117
-date: 2025-02-18
+comments: 137
+date: 2025-04-11
 brand: "省钱小能手"
 tags: ['平价装好物', '省钱小能手', '小红书爆款']
+price: 210
+cost: 42
+weight: 1.48
+size: "30x24x10cm"
+category_type: "常青款"
+return_rate: 0.03
 ---
-
 整理了一波不到20块但能提升幸福感的小东西！
 
 1 桌面镜子 8元
@@ -30,5 +35,14 @@ comment_analysis:
   purchase_intent: ['有链接吗']
   comparison_mentions: []
   related_brands: ['省钱小能手']
-  ask_link_count: 154
+  ask_link_count: 201
+
+ecommerce:
+  profit_margin: 0.8
+  logistics_level: "低"
+  competition_level: "高"
+  entry_difficulty: "高"
+  recommended_for_newbie: True
+  differentiation_opportunity: "材质升级"
+  estimated_monthly_sales: 7185
 -->

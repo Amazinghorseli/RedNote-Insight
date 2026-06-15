@@ -1,13 +1,18 @@
 ---
 title: "平价香薰蜡烛推荐！几十块get高级感"
-author: "小红书用户1188"
+author: "小红书用户8711"
 likes: 324
-comments: 78
-date: 2025-03-18
+comments: 108
+date: 2025-01-28
 brand: "香薰爱好者"
 tags: ['香薰蜡好物', '香薰爱好者', '小红书爆款']
+price: 232
+cost: 58
+weight: 1.61
+size: "32x28x10cm"
+category_type: "常青款"
+return_rate: 0.08
 ---
-
 整理了6款平价又好闻的香薰蜡烛！
 
 1 名创优品柏林少女平替 35元 玫瑰+荔枝，甜而不腻
@@ -24,5 +29,14 @@ comment_analysis:
   purchase_intent: ['哪个最持久', '哪个适合卧室']
   comparison_mentions: ['比祖马龙性价比高']
   related_brands: ['香薰爱好者', '名创优品', '宜家', '观夏']
-  ask_link_count: 122
+  ask_link_count: 82
+
+ecommerce:
+  profit_margin: 0.75
+  logistics_level: "低"
+  competition_level: "低"
+  entry_difficulty: "低"
+  recommended_for_newbie: True
+  differentiation_opportunity: "包装升级"
+  estimated_monthly_sales: 6989
 -->

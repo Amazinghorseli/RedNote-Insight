@@ -1,13 +1,18 @@
 ---
 title: "内衣袜子收纳！10块钱解决乱糟糟"
-author: "小红书用户2545"
+author: "小红书用户2402"
 likes: 234
-comments: 57
-date: 2025-04-07
+comments: 36
+date: 2025-05-07
 brand: "内衣收纳"
 tags: ['储物好好物', '内衣收纳', '小红书爆款']
+price: 84
+cost: 28
+weight: 1.0
+size: "16x30x11cm"
+category_type: "常青款"
+return_rate: 0.09
 ---
-
 抽屉里内衣袜子乱成一团的看过来！
 
 抽屉分隔板 9元 自由组合
@@ -22,5 +27,14 @@ comment_analysis:
   purchase_intent: ['能放多少', '什么材质']
   comparison_mentions: []
   related_brands: ['内衣收纳']
-  ask_link_count: 63
+  ask_link_count: 73
+
+ecommerce:
+  profit_margin: 0.67
+  logistics_level: "低"
+  competition_level: "中"
+  entry_difficulty: "低"
+  recommended_for_newbie: True
+  differentiation_opportunity: "材质升级"
+  estimated_monthly_sales: 3629
 -->

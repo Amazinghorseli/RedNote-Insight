@@ -1,13 +1,18 @@
 ---
 title: "衣柜收纳！换季整理一篇搞定"
-author: "小红书用户2163"
+author: "小红书用户2876"
 likes: 356
-comments: 69
-date: 2025-02-01
+comments: 71
+date: 2025-02-20
 brand: "衣柜整理师"
 tags: ['储物好好物', '衣柜整理师', '小红书爆款']
+price: 45
+cost: 9
+weight: 0.35
+size: "9x20x6cm"
+category_type: "常青款"
+return_rate: 0.03
 ---
-
 换季了衣柜乱成一团的姐妹看过来！
 
 Step 1：全部清空，分类
@@ -27,5 +32,14 @@ comment_analysis:
   purchase_intent: ['真空袋会漏气吗']
   comparison_mentions: ['比收纳博主的方法实用']
   related_brands: ['衣柜整理师']
-  ask_link_count: 134
+  ask_link_count: 74
+
+ecommerce:
+  profit_margin: 0.8
+  logistics_level: "中"
+  competition_level: "中"
+  entry_difficulty: "低"
+  recommended_for_newbie: False
+  differentiation_opportunity: "配件增加"
+  estimated_monthly_sales: 1185
 -->

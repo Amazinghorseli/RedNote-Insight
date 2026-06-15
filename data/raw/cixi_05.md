@@ -1,13 +1,18 @@
 ---
 title: "磁吸灯到底买哪个？我把全网爆款都买了回来测评"
-author: "小红书用户3615"
+author: "小红书用户4456"
 likes: 567
-comments: 116
-date: 2025-01-25
+comments: 189
+date: 2025-03-03
 brand: "综合测评"
 tags: ['磁吸感好物', '综合测评', '小红书爆款']
+price: 260
+cost: 52
+weight: 0.48
+size: "15x29x4cm"
+category_type: "常青款"
+return_rate: 0.01
 ---
-
 花了半个月把小红书推的磁吸灯都买回来了！
 
 测评结果：
@@ -29,5 +34,14 @@ comment_analysis:
   purchase_intent: ['寝室用买哪种', '哪个最亮']
   comparison_mentions: ['星月比几光性价比高']
   related_brands: ['星月灯饰', '几光', '拼多多白牌']
-  ask_link_count: 189
+  ask_link_count: 159
+
+ecommerce:
+  profit_margin: 0.8
+  logistics_level: "中"
+  competition_level: "中"
+  entry_difficulty: "高"
+  recommended_for_newbie: True
+  differentiation_opportunity: "包装升级"
+  estimated_monthly_sales: 2877
 -->

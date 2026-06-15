@@ -1,13 +1,18 @@
 ---
 title: "名创优品香薰全测评！帮你省钱不踩雷"
-author: "小红书用户9317"
+author: "小红书用户1006"
 likes: 567
-comments: 97
-date: 2025-03-27
+comments: 130
+date: 2025-05-27
 brand: "踩雷测评"
 tags: ['香薰好物', '踩雷测评', '小红书爆款']
+price: 130
+cost: 26
+weight: 0.3
+size: "18x26x15cm"
+category_type: "常青款"
+return_rate: 0.09
 ---
-
 把所有名创优品的香薰都买回来闻了一遍！
 
 可以买：
@@ -29,5 +34,14 @@ comment_analysis:
   purchase_intent: ['英国梨和祖马龙像吗']
   comparison_mentions: ['和祖马龙比味道']
   related_brands: ['踩雷测评', '名创优品']
-  ask_link_count: 199
+  ask_link_count: 182
+
+ecommerce:
+  profit_margin: 0.8
+  logistics_level: "低"
+  competition_level: "中"
+  entry_difficulty: "中"
+  recommended_for_newbie: False
+  differentiation_opportunity: "包装升级"
+  estimated_monthly_sales: 2021
 -->

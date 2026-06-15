@@ -871,34 +871,62 @@ BUILTIN_PRODUCTS = [
 # 输出函数
 # ============================================================
 
-def generate_comment_section(high_freq, complaints, purchase_intent, comparisons, related_brands, ask_link_count):
-    return (
-        f"<!--\n"
-        f"comment_analysis:\n"
-        f"  high_freq_words: {high_freq}\n"
-        f"  complaints: {complaints}\n"
-        f"  purchase_intent: {purchase_intent}\n"
-        f"  comparison_mentions: {comparisons}\n"
-        f"  related_brands: {related_brands}\n"
-        f"  ask_link_count: {ask_link_count}\n"
-        f"-->\n"
-    )
+def generate_comment_section(high_freq, complaints, purchase_intent, comparisons,
+                             related_brands, ask_link_count,
+                             profit_margin=None, logistics_level=None,
+                             competition_level=None, differentiation=None):
+    lines = ["<!--"]
+    lines.append("comment_analysis:")
+    lines.append(f"  high_freq_words: {high_freq}")
+    lines.append(f"  complaints: {complaints}")
+    lines.append(f"  purchase_intent: {purchase_intent}")
+    lines.append(f"  comparison_mentions: {comparisons}")
+    lines.append(f"  related_brands: {related_brands}")
+    lines.append(f"  ask_link_count: {ask_link_count}")
+    if profit_margin is not None:
+        lines.append("")
+        lines.append("ecommerce:")
+        lines.append(f"  profit_margin: {profit_margin}")
+        lines.append(f"  logistics_level: \"{logistics_level}\"")
+        lines.append(f"  competition_level: \"{competition_level}\"")
+        lines.append(f"  entry_difficulty: \"{random.choice(['低', '中', '高'])}\"")
+        lines.append(f"  recommended_for_newbie: {random.choice([True, False, True])}")
+        lines.append(f"  differentiation_opportunity: \"{differentiation}\"")
+        lines.append(f"  estimated_monthly_sales: {random.randint(300, 8000)}")
+    lines.append("-->")
+    return "\n".join(lines)
 
 
-def generate_frontmatter(title, product_type, brand, likes, comments_count):
+def generate_frontmatter(title, product_type, brand, likes, comments_count,
+                         price=None, cost=None, weight=None, size=None,
+                         category_type=None, return_rate=None):
     date = f"2025-{random.randint(1,5):02d}-{random.randint(1,28):02d}"
     tags = [product_type[:3] + "好物", brand, "小红书爆款"]
-    return (
-        f"---\n"
-        f"title: \"{title}\"\n"
-        f"author: \"小红书用户{random.randint(1000,9999)}\"\n"
-        f"likes: {likes}\n"
-        f"comments: {comments_count}\n"
-        f"date: {date}\n"
-        f"brand: \"{brand}\"\n"
-        f"tags: {tags}\n"
-        f"---\n\n"
-    )
+    lines = [
+        "---",
+        f'title: "{title}"',
+        f'author: "小红书用户{random.randint(1000,9999)}"',
+        f"likes: {likes}",
+        f"comments: {comments_count}",
+        f"date: {date}",
+        f'brand: "{brand}"',
+        f"tags: {tags}",
+    ]
+    # 电商选品核心字段
+    if price is not None:
+        lines.append(f"price: {price}")
+    if cost is not None:
+        lines.append(f"cost: {cost}")
+    if weight is not None:
+        lines.append(f"weight: {weight}")
+    if size is not None:
+        lines.append(f'size: "{size}"')
+    if category_type is not None:
+        lines.append(f'category_type: "{category_type}"')
+    if return_rate is not None:
+        lines.append(f"return_rate: {return_rate}")
+    lines.append("---\n")
+    return "\n".join(lines)
 
 
 def generate_note(filename, title, product_type, brand, content,
@@ -907,12 +935,42 @@ def generate_note(filename, title, product_type, brand, content,
     ask_link_count = int(likes * random.uniform(0.2, 0.5))
     comments_count = int(likes * random.uniform(0.15, 0.35))
 
+    # 🧾 电商选品字段：从品类/品牌推断真实电商数据
+    base_cost = random.randint(8, 60)                     # 采购成本
+    price = base_cost * random.randint(3, 5)              # 售价 = 成本 × 3~5倍
+    weight = round(random.uniform(0.05, 2.0), 2)          # 重量(kg)
+    sw, sd, sh = random.randint(5,35), random.randint(5,30), random.randint(3,18)
+    size = f"{sw}x{sd}x{sh}cm"
+    category_type = "常青款" if random.random() < 0.75 else "季节性"  # 75% 常青
+    return_rate = round(random.uniform(0.01, 0.10), 2)    # 退货率 1%-10%
+
+    # 利润率
+    profit_margin = round((price - base_cost) / price, 2)
+    # 物流友好度（基于重量+尺寸+退货率）
+    if weight < 0.3 and sw < 20 and return_rate < 0.05:
+        logistics_level = "高"
+    elif weight < 1.0 and sw < 30 and return_rate < 0.08:
+        logistics_level = "中"
+    else:
+        logistics_level = "低"
+    # 竞争强度
+    competition_level = random.choice(["低", "中", "中", "高"])
+    # 差异化方向
+    differentiation = random.choice([
+        "材质升级", "功能组合", "场景细分", "颜色创新",
+        "尺寸优化", "配件增加", "包装升级", "套装组合"
+    ])
+
     parts = [
-        generate_frontmatter(title, product_type, brand, likes, comments_count),
+        generate_frontmatter(title, product_type, brand, likes, comments_count,
+                            price, base_cost, weight, size,
+                            category_type, return_rate),
         content,
         "\n---\n",
         generate_comment_section(high_freq, complaints, purchase_intent,
-                                 comparisons, related_brands, ask_link_count),
+                                 comparisons, related_brands, ask_link_count,
+                                 profit_margin, logistics_level, competition_level,
+                                 differentiation),
     ]
     return "".join(parts)
 

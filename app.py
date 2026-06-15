@@ -181,15 +181,19 @@ reranker = base["reranker"]
 
 def run_insight_pipeline(query: str, status_placeholder=None) -> str:
     """
-    完整的洞察流程：
+    完整的洞察流程（扩大版）：
     检索 → CrossEncoder 评估
-      ├─ 有相关文档 → 评论分析 → 需求聚合 → 洞察生成
-      └─ 无相关文档 → 🔥 触发抓取 → 增量入库 → 重新检索 → 生成洞察
+      ├─ ≥20 篇相关 → 评论分析 → 需求聚合 → 洞察生成
+      └─ <20 篇相关 → 🔥 触发抓取补齐到 20+ → 增量入库 → 重新检索 → 生成洞察
+
+    阈值从 0 提升到 20 篇，确保洞察报告数据量充足。
     """
     from src.agents.comment_agent import CommentAnalyzer
     from src.agents.demand_agent import DemandAggregator
     from src.agents.insight_agent import InsightGenerator
     from src.config import RERANKER_THRESHOLD
+
+    MIN_NOTES = 20  # 洞察最低需要的笔记数
 
     def _do_insight(docs, category):
         """内部：文档 → 分析 → 聚合 → 报告"""
@@ -209,8 +213,8 @@ def run_insight_pipeline(query: str, status_placeholder=None) -> str:
             report += f"\n\n（注：LLM 生成失败，使用模板兜底。错误：{e}）"
         return report
 
-    # 1. 检索相关笔记
-    docs = hybrid_retriever.hybrid_search(query, k=10, bm25_k=25, final_k=10)
+    # 1. 扩大检索范围（从 10 → 20 篇）
+    docs = hybrid_retriever.hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
     if not docs:
         return "检索失败，请刷新页面重试。"
 
@@ -218,18 +222,24 @@ def run_insight_pipeline(query: str, status_placeholder=None) -> str:
     scores = reranker.rerank(query, docs)
     relevant = [doc for doc, s in zip(docs, scores) if s >= RERANKER_THRESHOLD]
 
-    if relevant:
-        # ✅ 有匹配数据，正常走管道
+    if len(relevant) >= MIN_NOTES:
+        # ✅ 有足够数据（≥20 篇），正常走管道
         return _do_insight(relevant, query)
 
-    # ❌ 没有相关数据 → 🔥 触发实时抓取
+    # ❌ 数据不足（< 20 篇）→ 🔥 触发实时抓取补齐
+    current_count = len(relevant)
+    fetch_target = MIN_NOTES - current_count + 5  # 多生成 5 篇做缓冲，确保超过 20
+
     if status_placeholder:
-        status_placeholder.info(f"🔍 知识库中没有「**{query}**」相关数据，正在实时生成该品类笔记...")
+        status_placeholder.info(
+            f"🔍 品类「**{query}**」当前只有 {current_count} 篇相关笔记，"
+            f"目标 ≥{MIN_NOTES} 篇，正在自动生成 {fetch_target} 篇补充笔记..."
+        )
 
     from src.fetcher import OnDemandFetcher
 
     fetcher = OnDemandFetcher(raw_dir=raw_dir)
-    count = fetcher.fetch(query, count=8)
+    count = fetcher.fetch(query, count=fetch_target)
 
     if count == 0:
         return f"抱歉，无法获取「{query}」的相关数据。请检查网络连接和 API 配置。"
@@ -243,7 +253,9 @@ def run_insight_pipeline(query: str, status_placeholder=None) -> str:
     # 用更新后的 retriever 重新查询
     import time
     time.sleep(0.5)  # 等 chromadb 落盘
-    fresh_docs = st.session_state.runtime["hybrid_retriever"].hybrid_search(query, k=10, bm25_k=25, final_k=10)
+    fresh_docs = st.session_state.runtime["hybrid_retriever"].hybrid_search(
+        query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES
+    )
     fresh_scores = reranker.rerank(query, fresh_docs)
     fresh_relevant = [doc for doc, s in zip(fresh_docs, fresh_scores) if s >= RERANKER_THRESHOLD]
 
@@ -252,7 +264,10 @@ def run_insight_pipeline(query: str, status_placeholder=None) -> str:
 
     # 用新数据生成洞察
     report = _do_insight(fresh_relevant, query)
-    report = f"（📥 本次查询为「{query}」实时生成了 {count} 篇新笔记）\n\n{report}"
+    report = (
+        f"（📥 本次查询为「{query}」实时生成了 {count} 篇新笔记，"
+        f"当前共 {len(fresh_relevant)} 篇相关笔记）\n\n{report}"
+    )
     return report
 
 
@@ -323,6 +338,7 @@ if mode == "问答模式":
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
+            status = st.empty()
             with st.spinner("思考中..."):
                 result = graph.invoke({
                     "question": prompt,
@@ -334,6 +350,49 @@ if mode == "问答模式":
                     "retry_count": 0,
                 })
                 response = result["generation"]
+
+                # 🚀 如果没有答案 → 自动生成品类数据 → 重新检索回答
+                if "无法回答" in response or "根据现有资料" in response:
+                    from src.fetcher import OnDemandFetcher
+
+                    category = prompt  # 直接用问题作为品类名
+                    status.info(f"🔍 知识库中暂无「{category}」相关信息，正在实时生成笔记...")
+
+                    fetcher = OnDemandFetcher(raw_dir=raw_dir)
+                    count = fetcher.fetch(category, count=15)
+
+                    if count > 0:
+                        status.success(f"✅ 已生成 {count} 篇「{category}」笔记，正在重新检索回答...")
+                        reload_after_fetch()
+
+                        import time
+                        time.sleep(0.5)
+
+                        # 使用更新后的 graph 重新问答
+                        fresh_graph = st.session_state.runtime["graph"]
+                        result = fresh_graph.invoke({
+                            "question": prompt,
+                            "rewritten_question": "",
+                            "strategy": strategy if strategy != "auto" else "",
+                            "documents": [],
+                            "relevant_docs": [],
+                            "generation": "",
+                            "retry_count": 0,
+                        })
+                        response = result["generation"]
+
+                        if "无法回答" in response or "根据现有资料" in response:
+                            response = (
+                                f"（📥 已为「{category}」生成 {count} 篇笔记，"
+                                f"但检索仍未匹配到相关信息）\n\n{response}"
+                            )
+                        else:
+                            response = (
+                                f"（📥 已为「{category}」实时生成 {count} 篇笔记作为知识补充）\n\n{response}"
+                            )
+                    else:
+                        response = f"抱歉，无法获取「{category}」的相关数据。请检查网络连接和 API 配置。"
+
                 st.markdown(response)
 
         st.session_state.qa_messages.append({"role": "assistant", "content": response})

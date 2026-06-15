@@ -14,7 +14,8 @@ import random
 
 # 确保能导入项目根目录的 generate_data.py
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _project_root not in sys.path:
+if _project_root not in sys.path:# 安装
+
     sys.path.insert(0, _project_root)
 
 from generate_data import NoteGenerator, write_notes

@@ -1,13 +1,18 @@
 ---
 title: "室友说我像在宿舍修仙？结果被打脸了"
-author: "小红书用户9348"
+author: "小红书用户1058"
 likes: 234
-comments: 53
-date: 2025-02-05
+comments: 51
+date: 2025-03-02
 brand: "极简修仙"
 tags: ['寝室改好物', '极简修仙', '小红书爆款']
+price: 255
+cost: 51
+weight: 1.71
+size: "21x20x11cm"
+category_type: "季节性"
+return_rate: 0.09
 ---
-
 刚改完室友说我太夸张了，结果一周后全来问我要链接！
 
 我的极简风改造：
@@ -30,5 +35,14 @@ comment_analysis:
   purchase_intent: ['绿植好养吗', '灰尘怎么处理']
   comparison_mentions: []
   related_brands: ['极简修仙']
-  ask_link_count: 109
+  ask_link_count: 61
+
+ecommerce:
+  profit_margin: 0.8
+  logistics_level: "低"
+  competition_level: "低"
+  entry_difficulty: "中"
+  recommended_for_newbie: True
+  differentiation_opportunity: "包装升级"
+  estimated_monthly_sales: 5519
 -->

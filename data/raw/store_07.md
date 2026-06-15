@@ -1,13 +1,18 @@
 ---
 title: "我妈说：你桌面这么整齐是换人了？"
-author: "小红书用户6313"
+author: "小红书用户4566"
 likes: 178
-comments: 49
-date: 2025-05-08
+comments: 58
+date: 2025-02-10
 brand: "收纳小白"
 tags: ['桌面收好物', '收纳小白', '小红书爆款']
+price: 72
+cost: 18
+weight: 0.05
+size: "17x13x17cm"
+category_type: "常青款"
+return_rate: 0.07
 ---
-
 作为一个曾经桌面乱到找不到手机的人，
 现在居然被我妈夸了！
 
@@ -26,5 +31,14 @@ comment_analysis:
   purchase_intent: ['收纳盒买什么尺寸']
   comparison_mentions: []
   related_brands: ['收纳小白']
-  ask_link_count: 88
+  ask_link_count: 81
+
+ecommerce:
+  profit_margin: 0.75
+  logistics_level: "中"
+  competition_level: "高"
+  entry_difficulty: "低"
+  recommended_for_newbie: True
+  differentiation_opportunity: "场景细分"
+  estimated_monthly_sales: 6327
 -->

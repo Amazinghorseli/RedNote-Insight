@@ -1,13 +1,18 @@
 ---
 title: "ins风房间装饰合集！几十块改造出租屋"
-author: "小红书用户1949"
+author: "小红书用户8612"
 likes: 345
-comments: 112
-date: 2025-03-08
+comments: 103
+date: 2025-02-26
 brand: "出租屋改造"
 tags: ['平价装好物', '出租屋改造', '小红书爆款']
+price: 171
+cost: 57
+weight: 1.57
+size: "12x10x17cm"
+category_type: "常青款"
+return_rate: 0.03
 ---
-
 出租屋不要将就！几十块就能住进ins博主家
 
 棉麻窗帘 45元 换掉丑窗帘
@@ -25,5 +30,14 @@ comment_analysis:
   purchase_intent: ['房东允许贴墙纸吗']
   comparison_mentions: ['比小红书其他出租屋改造实用']
   related_brands: ['出租屋改造']
-  ask_link_count: 165
+  ask_link_count: 69
+
+ecommerce:
+  profit_margin: 0.67
+  logistics_level: "低"
+  competition_level: "低"
+  entry_difficulty: "高"
+  recommended_for_newbie: True
+  differentiation_opportunity: "套装组合"
+  estimated_monthly_sales: 4878
 -->

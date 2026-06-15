@@ -1,13 +1,18 @@
 ---
 title: "寝室改造后，室友以为我换宿舍了"
-author: "小红书用户1525"
+author: "小红书用户4853"
 likes: 534
-comments: 162
-date: 2025-02-27
+comments: 159
+date: 2025-05-03
 brand: "改造达人"
 tags: ['寝室改好物', '改造达人', '小红书爆款']
+price: 33
+cost: 11
+weight: 1.19
+size: "21x21x8cm"
+category_type: "常青款"
+return_rate: 0.06
 ---
-
 花了两周时间改造的4人寝！
 
 总花费：436元
@@ -31,5 +36,14 @@ comment_analysis:
   purchase_intent: ['宿舍允许改造吗', '会被查寝吗']
   comparison_mentions: ['比小红书上其他改造贴实用多了']
   related_brands: ['改造达人']
-  ask_link_count: 241
+  ask_link_count: 193
+
+ecommerce:
+  profit_margin: 0.67
+  logistics_level: "低"
+  competition_level: "中"
+  entry_difficulty: "中"
+  recommended_for_newbie: True
+  differentiation_opportunity: "功能组合"
+  estimated_monthly_sales: 7593
 -->

@@ -1,13 +1,18 @@
 ---
 title: "学生党进！20块打造ins风宿舍灯光"
-author: "小红书用户6514"
+author: "小红书用户9348"
 likes: 278
-comments: 60
-date: 2025-02-07
+comments: 69
+date: 2025-02-05
 brand: "名创优品"
 tags: ['磁吸感好物', '名创优品', '小红书爆款']
+price: 196
+cost: 49
+weight: 0.33
+size: "9x12x11cm"
+category_type: "常青款"
+return_rate: 0.05
 ---
-
 宿舍党看过来！只要20块就能让宿舍高级感拉满
 
 改造清单：
@@ -26,5 +31,14 @@ comment_analysis:
   purchase_intent: ['需要打孔吗', '被宿管查吗']
   comparison_mentions: ['比muji性价比高']
   related_brands: ['名创优品', 'muji']
-  ask_link_count: 113
+  ask_link_count: 73
+
+ecommerce:
+  profit_margin: 0.75
+  logistics_level: "中"
+  competition_level: "高"
+  entry_difficulty: "中"
+  recommended_for_newbie: True
+  differentiation_opportunity: "配件增加"
+  estimated_monthly_sales: 6491
 -->

@@ -1,13 +1,18 @@
 ---
 title: "租房党的自我修养！这些装饰房东都夸"
-author: "小红书用户5342"
+author: "小红书用户6763"
 likes: 312
-comments: 76
-date: 2025-05-06
+comments: 72
+date: 2025-04-01
 brand: "租房达人"
 tags: ['平价装好物', '租房达人', '小红书爆款']
+price: 145
+cost: 29
+weight: 0.96
+size: "6x11x16cm"
+category_type: "常青款"
+return_rate: 0.08
 ---
-
 租房最怕什么？不让打孔！
 
 磁吸灯 不用打孔，带走
@@ -26,5 +31,14 @@ comment_analysis:
   purchase_intent: ['地毯怎么清洁', '伸缩杆承重够吗']
   comparison_mentions: []
   related_brands: ['租房达人']
-  ask_link_count: 74
+  ask_link_count: 82
+
+ecommerce:
+  profit_margin: 0.8
+  logistics_level: "低"
+  competition_level: "低"
+  entry_difficulty: "中"
+  recommended_for_newbie: False
+  differentiation_opportunity: "包装升级"
+  estimated_monthly_sales: 7291
 -->

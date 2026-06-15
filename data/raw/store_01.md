@@ -1,13 +1,18 @@
 ---
 title: "桌面乱成这样？这8个收纳好物拯救你"
-author: "小红书用户6925"
+author: "小红书用户1949"
 likes: 421
-comments: 95
-date: 2025-05-10
+comments: 94
+date: 2025-03-08
 brand: "收纳达人"
 tags: ['桌面收好物', '收纳达人', '小红书爆款']
+price: 90
+cost: 18
+weight: 1.91
+size: "34x21x3cm"
+category_type: "常青款"
+return_rate: 0.05
 ---
-
 作为一个收纳狂魔，今天把我的桌面收纳秘籍全部分享出来！
 
 必买清单：
@@ -29,5 +34,14 @@ comment_analysis:
   purchase_intent: ['尺寸多大', '能放多少东西']
   comparison_mentions: ['比无印良品便宜']
   related_brands: ['收纳达人', '无印良品']
-  ask_link_count: 207
+  ask_link_count: 109
+
+ecommerce:
+  profit_margin: 0.8
+  logistics_level: "低"
+  competition_level: "低"
+  entry_difficulty: "低"
+  recommended_for_newbie: True
+  differentiation_opportunity: "配件增加"
+  estimated_monthly_sales: 945
 -->

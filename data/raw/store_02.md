@@ -1,13 +1,18 @@
 ---
 title: "3块钱的快乐 拼多多收纳盒真香"
-author: "小红书用户4733"
+author: "小红书用户4295"
 likes: 298
-comments: 86
-date: 2025-01-22
+comments: 73
+date: 2025-05-25
 brand: "拼多多白牌"
 tags: ['桌面收好物', '拼多多白牌', '小红书爆款']
+price: 60
+cost: 12
+weight: 1.54
+size: "9x26x18cm"
+category_type: "季节性"
+return_rate: 0.02
 ---
-
 你敢信这堆收纳盒加起来不到30块钱？
 
 推荐这几款我的最爱：
@@ -24,5 +29,14 @@ comment_analysis:
   purchase_intent: ['耐用吗', '会不会退货']
   comparison_mentions: ['比名创优品便宜一半']
   related_brands: ['拼多多白牌', '名创优品']
-  ask_link_count: 111
+  ask_link_count: 67
+
+ecommerce:
+  profit_margin: 0.8
+  logistics_level: "低"
+  competition_level: "高"
+  entry_difficulty: "高"
+  recommended_for_newbie: False
+  differentiation_opportunity: "颜色创新"
+  estimated_monthly_sales: 3568
 -->

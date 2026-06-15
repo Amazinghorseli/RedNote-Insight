@@ -1,13 +1,18 @@
 ---
 title: "宿舍床上桌怎么选？买错3个的血泪教训"
-author: "小红书用户7252"
+author: "小红书用户3662"
 likes: 345
-comments: 80
-date: 2025-01-13
+comments: 113
+date: 2025-02-28
 brand: "踩坑大王"
 tags: ['寝室改好物', '踩坑大王', '小红书爆款']
+price: 174
+cost: 58
+weight: 1.8
+size: "11x26x10cm"
+category_type: "常青款"
+return_rate: 0.04
 ---
-
 我在床上桌这条路上花了300元冤枉钱
 
 踩坑1：夹桌式的 夹不稳，IPAD差点摔了
@@ -26,5 +31,14 @@ comment_analysis:
   purchase_intent: ['升降的稳吗', '多少尺寸合适']
   comparison_mentions: []
   related_brands: ['踩坑大王']
-  ask_link_count: 150
+  ask_link_count: 100
+
+ecommerce:
+  profit_margin: 0.67
+  logistics_level: "低"
+  competition_level: "高"
+  entry_difficulty: "低"
+  recommended_for_newbie: False
+  differentiation_opportunity: "场景细分"
+  estimated_monthly_sales: 503
 -->

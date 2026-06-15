@@ -1,13 +1,18 @@
 ---
 title: "大一新生必看！寝室改造避坑指南"
-author: "小红书用户8019"
+author: "小红书用户3546"
 likes: 678
-comments: 202
-date: 2025-05-09
+comments: 197
+date: 2025-01-04
 brand: "过来人经验"
 tags: ['寝室改好物', '过来人经验', '小红书爆款']
+price: 235
+cost: 47
+weight: 1.08
+size: "26x22x12cm"
+category_type: "季节性"
+return_rate: 0.02
 ---
-
 作为大四老学姐，含泪总结寝室改造的坑！
 
 不要买：
@@ -31,5 +36,14 @@ comment_analysis:
   purchase_intent: ['床上桌推荐哪个']
   comparison_mentions: []
   related_brands: ['过来人经验']
-  ask_link_count: 164
+  ask_link_count: 305
+
+ecommerce:
+  profit_margin: 0.8
+  logistics_level: "低"
+  competition_level: "中"
+  entry_difficulty: "中"
+  recommended_for_newbie: False
+  differentiation_opportunity: "尺寸优化"
+  estimated_monthly_sales: 5254
 -->

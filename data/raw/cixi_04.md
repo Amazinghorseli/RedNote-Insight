@@ -1,13 +1,18 @@
 ---
 title: "跟风买的磁吸灯，结果被我爸夸了一星期"
-author: "小红书用户4611"
+author: "小红书用户5010"
 likes: 156
-comments: 45
-date: 2025-05-14
+comments: 26
+date: 2025-05-24
 brand: "德力西"
 tags: ['磁吸感好物', '德力西', '小红书爆款']
+price: 100
+cost: 25
+weight: 1.29
+size: "16x10x14cm"
+category_type: "常青款"
+return_rate: 0.07
 ---
-
 哈哈哈真的没想到！
 
 给爸妈家装了几个磁吸感应灯在走廊和厨房，
@@ -27,5 +32,14 @@ comment_analysis:
   purchase_intent: ['厨房能用吗', '防水吗']
   comparison_mentions: ['比欧普质量好']
   related_brands: ['德力西', '欧普照明']
-  ask_link_count: 57
+  ask_link_count: 42
+
+ecommerce:
+  profit_margin: 0.75
+  logistics_level: "低"
+  competition_level: "低"
+  entry_difficulty: "低"
+  recommended_for_newbie: False
+  differentiation_opportunity: "场景细分"
+  estimated_monthly_sales: 3408
 -->
