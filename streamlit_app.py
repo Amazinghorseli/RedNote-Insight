@@ -106,9 +106,94 @@ with st.sidebar:
     st.caption("🕷️ 抓取模式仅限本地使用，首次需扫码登录")
 
 # ============================================================
+# 共用工具
+# ============================================================
+def _rebuild():
+    """增量入库后重建所有检索器和 LangGraph"""
+    from src.ingestion import incremental_ingest, rebuild_all_chunks
+    from src.retrievers import HybridRetriever
+    from rank_bm25 import BM25Okapi
+    import jieba
+    incremental_ingest(state["raw_dir"], state["vectorstore"])
+    chunks = rebuild_all_chunks(state["raw_dir"])
+    tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
+    state["bm25"] = BM25Okapi(tokenized)
+    state["chunks"] = chunks
+    state["total_chunks"] = len(chunks)
+    hr = HybridRetriever(state["vectorstore"], chunks)
+    state["hybrid_retriever"] = hr
+    def bms(q2, k=3):
+        scores = state["bm25"].get_scores(list(jieba.cut(q2)))
+        return [chunks[i] for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]]
+    state["bm25_search"] = bms
+    from src.graph import build_graph
+    state["graph"] = build_graph(state["vectorstore"], bms, hr, reranker=state["reranker"])
+
+def _auto_fetch(keyword: str, count: int = 15) -> int:
+    """自动抓取：优先真实爬虫→降级 LLM 生成。返回抓取篇数。"""
+    from src.crawler import CrawlerInterface
+    crawler = CrawlerInterface(raw_dir=state["raw_dir"])
+    result = crawler.crawl(keyword, count=count)
+    c = result["count"]
+    if c > 0:
+        _rebuild()
+    return c
+
+def _should_fetch(answer: str) -> bool:
+    triggers = ["无法回答", "根据现有资料", "无法找到", "抱歉", "没有找到"]
+    return any(t in answer for t in triggers)
+
+# ============================================================
 # 洞察管道
 # ============================================================
 def run_insight(query: str, status_placeholder=None) -> str:
+    from src.agents.comment_agent import CommentAnalyzer
+    from src.agents.demand_agent import DemandAggregator
+    from src.agents.insight_agent import InsightGenerator
+    from src.config import RERANKER_THRESHOLD
+
+    MIN_NOTES = 10
+    hr = state["hybrid_retriever"]
+    reranker = state["reranker"]
+    raw_dir = state["raw_dir"]
+
+    def _do_insight(docs, category):
+        analyzer = CommentAnalyzer(raw_dir=raw_dir)
+        analyses = analyzer.analyze(docs)
+        if not analyses:
+            return "没有找到评论分析数据。"
+        aggregator = DemandAggregator()
+        aggregated = aggregator.aggregate(analyses)
+        generator = InsightGenerator()
+        try:
+            return generator.generate(aggregated, category=category)
+        except Exception as e:
+            return generator.generate_fallback(aggregated, category=category) + f"\n\n（LLM 降级为模板。错误：{e}）"
+
+    docs = hr.hybrid_search(query, k=MIN_NOTES, bm25_k=30, final_k=MIN_NOTES)
+    if not docs:
+        docs = []
+
+    scores = reranker.rerank(query, docs) if docs else []
+    relevant = [doc for doc, s in zip(docs, scores) if s >= RERANKER_THRESHOLD]
+
+    if len(relevant) >= 3:
+        return _do_insight(relevant, query)
+
+    # 无数据 → 自动抓取 → 重试
+    if status_placeholder:
+        status_placeholder.info(f"📊 知识库无「{query}」数据，正在自动抓取...")
+    c = _auto_fetch(query, count=15)
+    if c == 0:
+        return f"无法获取「{query}」的数据。"
+
+    import time; time.sleep(0.5)
+    fresh = state["hybrid_retriever"].hybrid_search(query, k=MIN_NOTES, bm25_k=30, final_k=MIN_NOTES)
+    fresh_scores = reranker.rerank(query, fresh) if fresh else []
+    fresh_rel = [d for d, s in zip(fresh, fresh_scores) if s >= RERANKER_THRESHOLD]
+    if not fresh_rel:
+        return f"已抓取 {c} 篇但未匹配到相关内容，请稍后重试。"
+    return f"（📥 已抓取 {c} 篇真实笔记）\n\n{_do_insight(fresh_rel, query)}"
     from src.agents.comment_agent import CommentAnalyzer
     from src.agents.demand_agent import DemandAggregator
     from src.agents.insight_agent import InsightGenerator
@@ -185,20 +270,33 @@ if mode == "问答模式":
         with st.chat_message("user"):
             st.markdown(q)
         with st.chat_message("assistant"):
-            with st.spinner("思考中..."):
-                result = state["graph"].invoke({
-                    "question": q, "rewritten_question": "",
+            status = st.empty()
+
+            def _qa_run(query):
+                r = state["graph"].invoke({
+                    "question": query, "rewritten_question": "",
                     "strategy": "", "documents": [], "relevant_docs": [],
                     "generation": "", "retry_count": 0,
                 })
-                ans = result["generation"]
-                if "无法回答" in ans:
-                    from src.fetcher import OnDemandFetcher
-                    fetcher = OnDemandFetcher(raw_dir=state["raw_dir"])
-                    c = fetcher.fetch(q, count=10)
-                    if c > 0:
-                        ans = f"（📥 已生成 {c} 篇笔记）\n\n{ans}"
-                st.markdown(ans)
+                return r["generation"]
+
+            with st.spinner("检索中..."):
+                ans = _qa_run(q)
+
+            if _should_fetch(ans):
+                status.info(f"📊 知识库无「{q}」数据，正在自动抓取...")
+                c = _auto_fetch(q, count=15)
+                if c > 0:
+                    status.info(f"✅ 已抓取 {c} 篇，重新检索...")
+                    import time; time.sleep(0.5)
+                    ans = _qa_run(q)
+                    if _should_fetch(ans):
+                        ans = f"（📥 已抓取 {c} 篇笔记，但仍未匹配）\n\n{ans}"
+                    else:
+                        ans = f"（📥 已抓取 {c} 篇真实笔记）\n\n{ans}"
+
+            status.empty()
+            st.markdown(ans)
         st.session_state.qa_msgs.append({"role": "assistant", "content": ans})
 
 # ============================================================
