@@ -5,7 +5,6 @@ retrievers.py - 混合检索 + 重排序
 from src.logger import logger
 from typing import List
 from rank_bm25 import BM25Okapi
-from sentence_transformers import CrossEncoder
 from langchain_core.documents import Document
 import jieba
 
@@ -113,9 +112,17 @@ class APIReranker:
 
 
 class Reranker:
-    """使用 CrossEncoder 对检索结果重排序"""
+    """使用 CrossEncoder 对检索结果重排序（本地模式，需安装 sentence-transformers）"""
 
     def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3"):
+        try:
+            from sentence_transformers import CrossEncoder
+        except ImportError:
+            raise ImportError(
+                "本地 Reranker 需要 sentence-transformers。"
+                "请运行: pip install sentence-transformers\n"
+                "或使用 APIReranker（基于 API，无需本地模型）"
+            )
         logger.info(f"[Reranker] 加载模型: {model_name}")
         self.model = CrossEncoder(model_name)
 
