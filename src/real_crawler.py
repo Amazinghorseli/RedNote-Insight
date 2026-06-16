@@ -106,16 +106,13 @@ class XHSCrawler:
             except Exception as e:
                 print(f"[Crawler] Cookie 文件加载失败: {e}")
 
-        # 3. 应用 cookie
+        # 3. 应用 cookie（DrissionPage 4.x: page.set.cookies() 接受列表）
         if cookies:
             try:
                 self.page.get("https://www.xiaohongshu.com")
                 time.sleep(1)
-                for c in cookies:
-                    try:
-                        self.page.set.cookies(c)
-                    except Exception:
-                        pass
+                # 批量设置 cookie
+                self.page.set.cookies(cookies)
                 self.page.get("https://www.xiaohongshu.com")
                 time.sleep(2)
                 if "login" not in self.page.url:
@@ -162,10 +159,11 @@ class XHSCrawler:
     def _save_cookies(self):
         """保存当前 cookie 到文件"""
         try:
-            cookies = self.page.get_cookies()
+            cookies = self.page.cookies(all_domains=True, all_info=True)
+            cookie_list = list(cookies) if cookies else []
             with open(COOKIE_FILE, "w", encoding="utf-8") as f:
-                json.dump(cookies, f, ensure_ascii=False)
-            print("[Crawler] Cookie 已保存")
+                json.dump(cookie_list, f, ensure_ascii=False)
+            print(f"[Crawler] Cookie 已保存 ({len(cookie_list)} 条)")
         except Exception as e:
             print(f"[Crawler] Cookie 保存失败: {e}")
 

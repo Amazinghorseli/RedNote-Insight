@@ -30,3 +30,6 @@ Thumbs.db
 .streamlit/secrets.toml
 *.pyc
 __pycache__/
+
+# 小红书登录 Cookie（敏感信息，不要提交）
+data/cookies.json

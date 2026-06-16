@@ -15,6 +15,10 @@ import os
 import sys
 import json
 
+# Fix Windows GBK encoding for emoji output
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 COOKIE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
