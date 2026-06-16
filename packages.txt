@@ -1,3 +1,2 @@
-# System deps for headless chromium (DrissionPage)
-chromium
-chromium-driver
+# No system packages needed for core features (insight + QA)
+# Crawler (DrissionPage) only works locally
