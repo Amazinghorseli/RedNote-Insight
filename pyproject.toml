@@ -27,3 +27,8 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "drissionpage>=4.1.1.4",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.0",
+]

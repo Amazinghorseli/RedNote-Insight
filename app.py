@@ -179,33 +179,30 @@ reranker = base["reranker"]
 # 第三部分：洞察管道（核心变更：无匹配 → 自动抓取）
 # ======================================================================
 
-def run_insight_pipeline(query: str, status_placeholder=None) -> str:
+def run_insight_pipeline(query: str, status_placeholder=None, stream: bool = False):
     """
-    完整的洞察流程（扩大版）：
-    检索 → CrossEncoder 评估
-      ├─ ≥20 篇相关 → 评论分析 → 需求聚合 → 洞察生成
-      └─ <20 篇相关 → 🔥 触发抓取补齐到 20+ → 增量入库 → 重新检索 → 生成洞察
-
-    阈值从 0 提升到 20 篇，确保洞察报告数据量充足。
+    完整的洞察流程。
+    stream=False: 返回完整字符串（API 模式）
+    stream=True: 返回生成器，在生成阶段逐 token yield（Streamlit 流式输出）
     """
     from src.agents.comment_agent import CommentAnalyzer
     from src.agents.demand_agent import DemandAggregator
     from src.agents.insight_agent import InsightGenerator
     from src.config import RERANKER_THRESHOLD
 
-    MIN_NOTES = 20  # 洞察最低需要的笔记数
+    MIN_NOTES = 20
+    generator = InsightGenerator()
 
     def _do_insight(docs, category):
-        """内部：文档 → 分析 → 聚合 → 报告"""
+        """文档 → 分析 → 聚合 → 报告（非流式）"""
         analyzer = CommentAnalyzer(raw_dir=raw_dir)
         analyses = analyzer.analyze(docs)
         if not analyses:
-            return "没有找到评论分析数据。"
-
+            return "没有找到评论分析数据。" if not stream else iter(["没有找到评论分析数据。"])
         aggregator = DemandAggregator()
         aggregated = aggregator.aggregate(analyses)
-
-        generator = InsightGenerator()
+        if stream:
+            return generator.generate_stream(aggregated, category=category)
         try:
             report = generator.generate(aggregated, category=category)
         except Exception as e:
@@ -440,11 +437,17 @@ else:
 
         with st.chat_message("assistant"):
             status = st.empty()
+            report_container = st.empty()
             with st.spinner("分析评论区数据中..."):
-                report = run_insight_pipeline(prompt, status_placeholder=status)
-                st.markdown(report)
+                stream_gen = run_insight_pipeline(prompt, status_placeholder=status, stream=True)
+                # 流式输出
+                full_report = ""
+                for chunk in stream_gen:
+                    full_report += chunk
+                    report_container.markdown(full_report + "▌")
+                report_container.markdown(full_report)
 
-        st.session_state.insight_messages.append({"role": "assistant", "content": report})
+        st.session_state.insight_messages.append({"role": "assistant", "content": full_report})
 
 
 # ---- 底部 ----

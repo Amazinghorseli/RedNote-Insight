@@ -127,6 +127,60 @@ class InsightGenerator:
         response = self.llm.invoke(msg)
         return response.content.strip()
 
+    def generate_stream(self, aggregated: dict, category: str = "") -> str:
+        """
+        流式版本：逐 token 生成洞察报告。
+        返回一个生成器，yield 每个 token 块。
+        用法：
+            for chunk in generator.generate_stream(data, category):
+                container.write(chunk)
+        """
+        if aggregated["note_count"] == 0:
+            yield "没有足够的评论数据生成洞察报告。"
+            return
+
+        # 格式化评论数据（复用 generate 的逻辑）
+        complaints_str = "\n".join(
+            f"  {i+1}. 「{c}」出现 {f} 次"
+            for i, (c, f) in enumerate(aggregated["top_complaints"][:10])
+        ) or "  暂无"
+
+        intents_str = "\n".join(
+            f"  {i+1}. 「{t}」出现 {f} 次"
+            for i, (t, f) in enumerate(aggregated["top_purchase_intents"][:10])
+        ) or "  暂无"
+
+        msg = self.report_prompt.format_messages(
+            category=category or "未分类",
+            note_count=aggregated["note_count"],
+            avg_likes=aggregated["avg_likes"],
+            total_ask_link=aggregated["total_ask_link"],
+            evergreen_ratio=int(aggregated.get("evergreen_ratio", 0.8) * 100),
+            avg_price=aggregated.get("avg_price", 0),
+            avg_cost=aggregated.get("avg_cost", 0),
+            price_cost_ratio=aggregated.get("price_cost_ratio", 3),
+            profit_margin=int(aggregated.get("avg_profit_margin", 0.6) * 100),
+            avg_weight=aggregated.get("avg_weight", 0.3),
+            profit_score=aggregated.get("profit_score", 0),
+            logistics_score=aggregated.get("logistics_score", 0),
+            competition_score=aggregated.get("competition_score", 0),
+            demand_score=aggregated.get("demand_score", 0),
+            selection_score=aggregated.get("selection_score", 0),
+            complaints=complaints_str,
+            intents=intents_str,
+            comparisons="\n".join(
+                f"  - {c}" for c in aggregated.get("comparison_patterns", [])[:10]
+            ) or "  暂无",
+            brands=", ".join(aggregated.get("related_brands", [])) or "暂无",
+            differentiations=", ".join(aggregated.get("differentiation_directions", [])) or "暂无",
+            monthly_sales=aggregated.get("estimated_monthly_sales", 0),
+        )
+
+        # 流式调用 LLM
+        for chunk in self.llm.stream(msg):
+            if chunk.content:
+                yield chunk.content
+
     def generate_fallback(self, aggregated: dict, category: str = "") -> str:
         """
         无 LLM 时的兜底方案：模板化生成电商选品报告

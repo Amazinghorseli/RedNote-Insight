@@ -7,6 +7,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from src.config import LLM_CONFIG
+from src.logger import logger
 
 
 class Supervisor:
@@ -29,5 +30,5 @@ class Supervisor:
         strategy = self.llm.invoke(msg).content.strip().lower()
         if strategy not in available_strategies:
             strategy = "hybrid"
-        print(f"[Supervisor] 策略: {strategy}")
+        logger.info(f"Supervisor 策略: {strategy}")
         return strategy

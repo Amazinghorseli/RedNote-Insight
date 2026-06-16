@@ -8,11 +8,12 @@ build/
 # 环境变量
 .env
 
-# 测试与临时文件
-test_*.py
+# 临时文件
 sample_data.csv
 *_test.csv
-*.log
+
+# 运行时日志
+app.log
 
 # Vector DB index files are small — we COMMIT them so Streamlit Cloud
 # doesn't have to rebuild from scratch (saves 30-60s cold start).
@@ -27,9 +28,10 @@ sample_data.csv
 Thumbs.db
 
 # Streamlit
-.streamlit/secrets.toml
+# .streamlit/secrets.toml — 提交此文件以在免费版 Streamlit Cloud 使用
 *.pyc
 __pycache__/
 
 # 小红书登录 Cookie（敏感信息，不要提交）
 data/cookies.json
+.streamlit/secrets.toml

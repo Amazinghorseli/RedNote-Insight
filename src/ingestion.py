@@ -10,6 +10,7 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 from src.config import RAW_DIR, CHROMA_DIR, EMBEDDING_CONFIG
+from src.logger import logger
 
 
 # ===== 文档加载 =====
@@ -41,7 +42,7 @@ def load_raw_documents() -> list[Document]:
         text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
         doc.page_content = text.strip()
 
-    print(f"[加载] 加载了 {len(raw_docs)} 个原始文档")
+    logger.info(f"加载了 {len(raw_docs)} 个原始文档")
     return raw_docs
 
 
@@ -55,7 +56,7 @@ def chunk_documents(documents: list[Document], chunk_size=512, overlap=64) -> li
         separators=["\n## ", "\n### ", "\n\n", "\n", "。", ".", " "],
     )
     chunks = splitter.split_documents(documents)
-    print(f"[切分] {len(documents)} 篇文档 -> {len(chunks)} 个 chunk")
+    logger.info(f"{len(documents)} 篇文档 -> {len(chunks)} 个 chunk")
     return chunks
 
 
@@ -80,7 +81,7 @@ def build_vectorstore(chunks: list[Document]) -> Chroma:
         persist_directory=str(CHROMA_DIR),
     )
     count = vectorstore._collection.count()
-    print(f"[向量库] 已创建，共 {count} 个向量 -> {CHROMA_DIR}")
+    logger.info(f"向量库已创建，共 {count} 个向量 -> {CHROMA_DIR}")
     return vectorstore
 
 
@@ -133,7 +134,7 @@ def incremental_ingest(raw_dir: str, vectorstore: Chroma) -> list:
     if new_chunks:
         vectorstore.add_documents(new_chunks)
         count = vectorstore._collection.count()
-        print(f"[增量入库] 添加 {len(new_chunks)} 个 chunk，向量库总量: {count}")
+        logger.info(f"[增量入库] 添加 {len(new_chunks)} 个 chunk，向量库总量: {count}")
 
     return new_chunks
 

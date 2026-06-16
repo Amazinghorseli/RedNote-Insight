@@ -2,6 +2,7 @@
 retrievers.py - 混合检索 + 重排序
 合并自原 step03_hybrid_retriever + step04_reranker
 """
+from src.logger import logger
 from typing import List
 from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
@@ -18,9 +19,9 @@ class HybridRetriever:
         self.bm25 = self._build_bm25(chunks)
 
     def _build_bm25(self, chunks: list[Document]) -> BM25Okapi:
-        print("[BM25] 构建索引...")
+        logger.info("[BM25] 构建索引...")
         tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
-        print(f"  -> BM25 索引完成，共 {len(tokenized)} 篇文档")
+        logger.info(f"BM25 索引完成，共 {len(tokenized)} 篇文档")
         return BM25Okapi(tokenized)
 
     def hybrid_search(
@@ -33,7 +34,7 @@ class HybridRetriever:
         """RRF（Reciprocal Rank Fusion）融合检索"""
         # 1. 向量检索
         vector_results = self.vectorstore.similarity_search_with_score(query, k=k)
-        print(f"[VECTOR] 向量检索: {len(vector_results)} 个结果")
+        logger.info(f"[VECTOR] 向量检索: {len(vector_results)} 个结果")
 
         # 2. BM25 检索
         tokenized_query = list(jieba.cut(query))
@@ -43,7 +44,7 @@ class HybridRetriever:
             key=lambda i: bm25_scores[i],
             reverse=True,
         )[:bm25_k]
-        print(f"[BM25] BM25 检索: {len(bm25_indices)} 个结果")
+        logger.info(f"[BM25] BM25 检索: {len(bm25_indices)} 个结果")
 
         # 3. RRF 融合
         rrf_scores = {}
@@ -115,7 +116,7 @@ class Reranker:
     """使用 CrossEncoder 对检索结果重排序"""
 
     def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3"):
-        print(f"[Reranker] 加载模型: {model_name}")
+        logger.info(f"[Reranker] 加载模型: {model_name}")
         self.model = CrossEncoder(model_name)
 
     def rerank(self, query: str, documents: list[Document], top_k: int = 3) -> list[Document]:
@@ -125,5 +126,5 @@ class Reranker:
         scores = self.model.predict(pairs, show_progress_bar=False)
         scored = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
         reranked = [doc for doc, _ in scored[:top_k]]
-        print(f"[Reranker] {len(documents)} -> {len(reranked)} 篇")
+        logger.info(f"[Reranker] {len(documents)} -> {len(reranked)} 篇")
         return reranked

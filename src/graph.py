@@ -11,6 +11,7 @@ from langchain_openai import ChatOpenAI
 
 from src.config import LLM_CONFIG, RETRY_LIMIT, RERANKER_THRESHOLD
 from src.retrievers import APIReranker
+from src.logger import logger
 
 
 # ===== State =====
@@ -51,9 +52,9 @@ def create_retrieve_node(vectorstore, bm25_retriever, hybrid_retriever):
         query = state.get("rewritten_question") or state["question"]
         strategy = state.get("strategy", "hybrid")
         agent = agents.get(strategy, agents["hybrid"])
-        print(f"[检索] 策略={strategy} | 查询={query[:60]}")
+        logger.info(f"策略={strategy} | 查询={query[:60]}")
         docs = agent(query)
-        print(f"  -> 检索到 {len(docs)} 篇文档")
+        logger.info(f"检索到 {len(docs)} 篇文档")
         return {"documents": docs}
 
     return retrieve_node
@@ -81,7 +82,7 @@ def create_rerank_node(reranker: APIReranker):
             return {"relevant_docs": []}
 
         query = state.get("rewritten_question") or state["question"]
-        print(f"[重排序] CrossEncoder 评估 {len(docs)} 篇文档...")
+        logger.info(f"CrossEncoder 评估 {len(docs)} 篇文档...")
 
         # API 调用
         scores = reranker.rerank(query, docs)
@@ -100,10 +101,10 @@ def create_rerank_node(reranker: APIReranker):
         )
         relevant = [doc for doc, _ in scored]
 
-        print(f"  -> 相关 {len(relevant)} / 共 {len(docs)} 篇 (threshold={RERANKER_THRESHOLD})")
+        logger.info(f"相关 {len(relevant)} / 共 {len(docs)} 篇 (threshold={RERANKER_THRESHOLD})")
         for doc, score in scored[:3]:
             src = doc.metadata.get("source", "?")[:35]
-            print(f"     评分 {score:.4f} | {src}")
+            logger.debug(f"评分 {score:.4f} | {src}")
         return {"relevant_docs": relevant}
 
     return rerank_node
@@ -116,17 +117,17 @@ def rewrite_node(state: AgentState) -> dict:
          "只输出重写后的查询，不要解释。"),
         ("human", "原问题：{question}"),
     ])
-    print("[重写] 优化查询...")
+    logger.info("优化查询重写...")
     msg = rewrite_prompt.format_messages(question=state["question"])
     rewritten = llm.invoke(msg).content.strip()
     count = state["retry_count"] + 1
-    print(f"  -> 第 {count} 次重写: '{rewritten[:80]}'")
+    logger.info(f"第 {count} 次重写: '{rewritten[:80]}'")
     return {"rewritten_question": rewritten, "retry_count": count}
 
 
 def generate_node(state: AgentState) -> dict:
     """基于相关文档生成回答"""
-    print("[生成] 正在生成回答...")
+    logger.info("正在生成回答...")
     docs = state.get("relevant_docs") or state.get("documents", [])
     context = "\n---\n".join(
         f"[文档{i+1}] {d.page_content}" for i, d in enumerate(docs)
@@ -138,7 +139,7 @@ def generate_node(state: AgentState) -> dict:
 
 def fallback_node(state: AgentState) -> dict:
     """兜底：无法回答"""
-    print("[兜底] 无法找到相关信息")
+    logger.warning("无法找到相关信息，触发 fallback")
     return {"generation": "抱歉，根据现有资料无法回答这个问题。"}
 
 

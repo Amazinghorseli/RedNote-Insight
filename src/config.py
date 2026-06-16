@@ -22,33 +22,37 @@ try:
 except Exception:
     pass  # 本地环境没有 streamlit 也没关系
 
-# 3. 兜底：如果都没有，用内置默认值（方便一键部署演示）
-_DEFAULT_API_KEY = "sk-pzfykccdjntaspwmyhtmoiovyttlbbaqwubrgvwmkbhyoist"
-_DEFAULT_BASE_URL = "https://api.siliconflow.cn/v1"
-
-def _get(key: str, default: str = None) -> str:
-    return os.getenv(key) or default or ""
+# 3. 严格模式：必须配置环境变量，不提供默认值，避免 API Key 泄露
+def _get(key: str) -> str:
+    val = os.getenv(key)
+    if not val:
+        raise ValueError(
+            f"❌ 缺少环境变量 {key}。\n"
+            f"   请复制 .env.example 为 .env，填入你的 API Key。\n"
+            f"   Streamlit Cloud 用户在 Secrets 中配置。"
+        )
+    return val
 
 # ===== LLM 配置 =====
 LLM_CONFIG = {
-    "model": _get("LLM_MODEL", "deepseek-ai/DeepSeek-V4-Flash"),
+    "model": os.getenv("LLM_MODEL", "deepseek-ai/DeepSeek-V4-Flash"),
     "temperature": 0,
-    "api_key": _get("OPENAI_API_KEY", _DEFAULT_API_KEY),
-    "base_url": _get("OPENAI_BASE_URL", _DEFAULT_BASE_URL),
+    "api_key": _get("OPENAI_API_KEY"),
+    "base_url": _get("OPENAI_BASE_URL"),
 }
 
 # ===== Embedding 配置 =====
 EMBEDDING_CONFIG = {
-    "model": _get("EMBEDDING_MODEL", "BAAI/bge-m3"),
-    "api_key": _get("OPENAI_API_KEY", _DEFAULT_API_KEY),
-    "base_url": _get("OPENAI_BASE_URL", _DEFAULT_BASE_URL),
+    "model": os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
+    "api_key": _get("OPENAI_API_KEY"),
+    "base_url": _get("OPENAI_BASE_URL"),
 }
 
 # ===== Reranker 配置 =====
 RERANKER_CONFIG = {
-    "model": _get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
-    "api_key": _get("OPENAI_API_KEY", _DEFAULT_API_KEY),
-    "base_url": _get("OPENAI_BASE_URL", _DEFAULT_BASE_URL),
+    "model": os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
+    "api_key": _get("OPENAI_API_KEY"),
+    "base_url": _get("OPENAI_BASE_URL"),
 }
 RERANKER_THRESHOLD = 0.1  # 低于此分的文档视为不相关
 
