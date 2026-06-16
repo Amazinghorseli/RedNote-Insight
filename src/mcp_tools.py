@@ -22,7 +22,7 @@ from mcp.server.fastmcp import FastMCP
 from src.agents.comment_agent import CommentAnalyzer
 from src.agents.demand_agent import DemandAggregator
 from src.agents.insight_agent import InsightGenerator
-from src.fetcher import OnDemandFetcher
+from src.crawler import CrawlerInterface
 from src.config import RAW_DIR
 
 # ============================================================
@@ -143,25 +143,36 @@ async def generate_insight_report(aggregated_json: str, category: str) -> str:
 # 工具 4：按需抓取品类数据
 # ============================================================
 @mcp.tool()
-async def fetch_category_data(category: str, count: int = 8) -> str:
+async def fetch_category_data(category: str, count: int = 30) -> str:
     """
-    当知识库缺少某品类数据时，自动生成该品类的小红书笔记并入库
+    当知识库缺少某品类数据时，从小红书真实抓取笔记和评论并入库。
+    首次使用需先在命令行运行 `uv run python src/real_crawler.py \"品类名\"` 登录。
 
     Args:
         category: 品类名称（如"健身服"、"蓝牙耳机"）
-        count: 要生成的笔记数量（默认 8 篇）
+        count: 要抓取的笔记数量（默认 30 篇）
 
     Returns:
-        生成结果说明
+        抓取结果说明
     """
-    fetcher = OnDemandFetcher(raw_dir=RAW_DIR)
-    written = fetcher.fetch(category, count=count)
+    crawler = CrawlerInterface(raw_dir=RAW_DIR)
+
+    if not crawler.is_available:
+        return json.dumps({
+            "success": False,
+            "category": category,
+            "generated_count": 0,
+            "message": f"爬虫未登录。请先在命令行运行: uv run python src/real_crawler.py \"{category}\" 登录后重试"
+        }, ensure_ascii=False)
+
+    result = crawler.crawl(category, count=count)
 
     return json.dumps({
-        "success": written > 0,
+        "success": result["count"] > 0,
         "category": category,
-        "generated_count": written,
-        "message": f"已生成 {written} 篇「{category}」笔记，存放在 data/raw/"
+        "generated_count": result["count"],
+        "method": result["method"],
+        "message": f"已从小红书抓取 {result['count']} 篇「{category}」真实笔记，存放在 data/raw/"
     }, ensure_ascii=False)
 
 

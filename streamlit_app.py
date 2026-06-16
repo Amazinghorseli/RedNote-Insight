@@ -129,10 +129,18 @@ def _rebuild():
     from src.graph import build_graph
     state["graph"] = build_graph(state["vectorstore"], bms, hr, reranker=state["reranker"])
 
-def _auto_fetch(keyword: str, count: int = 15) -> int:
-    """自动抓取：优先真实爬虫→降级 LLM 生成。返回抓取篇数。"""
+def _auto_fetch(keyword: str, count: int = 30) -> int:
+    """自动抓取：使用真实爬虫从小红书抓取笔记和评论。返回抓取篇数。"""
     from src.crawler import CrawlerInterface
-    crawler = CrawlerInterface(raw_dir=state["raw_dir"])
+    # 云端模式：从 Streamlit Secrets 读取 cookie
+    cookies_json = ""
+    try:
+        cookies_json = st.secrets.get("XHS_COOKIES", "")
+    except Exception:
+        pass
+    crawler = CrawlerInterface(raw_dir=state["raw_dir"], cookies_json=cookies_json)
+    if not crawler.is_available:
+        return 0
     result = crawler.crawl(keyword, count=count)
     c = result["count"]
     if c > 0:
@@ -183,9 +191,9 @@ def run_insight(query: str, status_placeholder=None) -> str:
     # 无数据 → 自动抓取 → 重试
     if status_placeholder:
         status_placeholder.info(f"📊 知识库无「{query}」数据，正在自动抓取...")
-    c = _auto_fetch(query, count=15)
+    c = _auto_fetch(query, count=30)
     if c == 0:
-        return f"无法获取「{query}」的数据。"
+        return f"无法获取「{query}」的数据。\n\n💡 请先在「🕷️ 抓取数据」模式中登录小红书，或在命令行运行:\n`uv run python src/real_crawler.py \"{query}\"`"
 
     import time; time.sleep(0.5)
     fresh = state["hybrid_retriever"].hybrid_search(query, k=MIN_NOTES, bm25_k=30, final_k=MIN_NOTES)
@@ -193,64 +201,7 @@ def run_insight(query: str, status_placeholder=None) -> str:
     fresh_rel = [d for d, s in zip(fresh, fresh_scores) if s >= RERANKER_THRESHOLD]
     if not fresh_rel:
         return f"已抓取 {c} 篇但未匹配到相关内容，请稍后重试。"
-    return f"（📥 已抓取 {c} 篇真实笔记）\n\n{_do_insight(fresh_rel, query)}"
-    from src.agents.comment_agent import CommentAnalyzer
-    from src.agents.demand_agent import DemandAggregator
-    from src.agents.insight_agent import InsightGenerator
-    from src.config import RERANKER_THRESHOLD
-    from src.crawler import CrawlerInterface
-
-    MIN_NOTES = 10
-    hr = state["hybrid_retriever"]
-    reranker = state["reranker"]
-    raw_dir = state["raw_dir"]
-
-    def _do_insight(docs, category):
-        analyzer = CommentAnalyzer(raw_dir=raw_dir)
-        analyses = analyzer.analyze(docs)
-        if not analyses:
-            return "没有找到评论分析数据。"
-        aggregator = DemandAggregator()
-        aggregated = aggregator.aggregate(analyses)
-        generator = InsightGenerator()
-        try:
-            return generator.generate(aggregated, category=category)
-        except Exception as e:
-            return generator.generate_fallback(aggregated, category=category) + f"\n\n（LLM 降级为模板。错误：{e}）"
-
-    docs = hr.hybrid_search(query, k=MIN_NOTES, bm25_k=30, final_k=MIN_NOTES)
-    if not docs:
-        return "检索失败，请刷新重试。"
-
-    scores = reranker.rerank(query, docs)
-    relevant = [doc for doc, s in zip(docs, scores) if s >= RERANKER_THRESHOLD]
-
-    if len(relevant) >= 3:
-        return _do_insight(relevant, query)
-    else:
-        if status_placeholder:
-            status_placeholder.info(f"数据不足（{len(relevant)} 篇），正在自动抓取...")
-        crawler = CrawlerInterface(raw_dir=raw_dir)
-        result = crawler.crawl(query, count=15)
-        count = result["count"]
-        if count == 0:
-            return f"无法获取「{query}」的数据。"
-        # 增量入库
-        from src.ingestion import incremental_ingest, rebuild_all_chunks
-        incremental_ingest(raw_dir, state["vectorstore"])
-        chunks = rebuild_all_chunks(raw_dir)
-        from rank_bm25 import BM25Okapi
-        import jieba
-        tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
-        state["bm25"] = BM25Okapi(tokenized)
-        state["chunks"] = chunks
-        hr2 = HybridRetriever(state["vectorstore"], chunks)
-        state["hybrid_retriever"] = hr2
-        fresh = hr2.hybrid_search(query, k=MIN_NOTES)
-        fresh_rel = [d for d, s in zip(fresh, reranker.rerank(query, fresh)) if s >= RERANKER_THRESHOLD]
-        if not fresh_rel:
-            return f"已生成 {count} 篇笔记但检索未匹配。"
-        return f"（📥 已生成 {count} 篇笔记）\n\n{_do_insight(fresh_rel, query)}"
+    return f"（📥 已从小红书抓取 {c} 篇真实笔记）\n\n{_do_insight(fresh_rel, query)}"
 
 
 # ============================================================
@@ -284,16 +235,21 @@ if mode == "问答模式":
                 ans = _qa_run(q)
 
             if _should_fetch(ans):
-                status.info(f"📊 知识库无「{q}」数据，正在自动抓取...")
-                c = _auto_fetch(q, count=15)
+                status.info(f"📊 知识库无「{q}」数据，正在从小红书实时抓取...")
+                c = _auto_fetch(q, count=30)
                 if c > 0:
-                    status.info(f"✅ 已抓取 {c} 篇，重新检索...")
+                    status.info(f"✅ 已抓取 {c} 篇真实笔记，重新检索...")
                     import time; time.sleep(0.5)
                     ans = _qa_run(q)
                     if _should_fetch(ans):
                         ans = f"（📥 已抓取 {c} 篇笔记，但仍未匹配）\n\n{ans}"
                     else:
-                        ans = f"（📥 已抓取 {c} 篇真实笔记）\n\n{ans}"
+                        ans = f"（📥 已从小红书抓取 {c} 篇真实笔记）\n\n{ans}"
+                else:
+                    ans = (f"{ans}\n\n"
+                           f"💡 自动抓取未成功。\n"
+                           f"   • 本地：`uv run python src/real_crawler.py \"{q}\"`\n"
+                           f"   • 云端：配置 Streamlit Secrets → XHS_COOKIES（运行 scripts/export_cookies.py 导出）")
 
             status.empty()
             st.markdown(ans)
@@ -342,9 +298,32 @@ else:
 
         try:
             from src.real_crawler import XHSCrawler
-            log_area.info(f"🕷️ 正在打开浏览器搜索「{category}」...")
+            log_area.info(f"🕷️ 正在打开浏览器...")
 
-            crawler = XHSCrawler()
+            # 云端模式：从 Secrets 读 cookie
+            cookies_json = ""
+            try:
+                cookies_json = st.secrets.get("XHS_COOKIES", "")
+            except Exception:
+                pass
+
+            crawler = XHSCrawler(cookies_json=cookies_json)
+
+            # 检查登录状态
+            if not crawler.is_logged_in:
+                if crawler.is_cloud_mode:
+                    log_area.warning("☁️ 云端模式未登录。请在 Streamlit Secrets 中配置 XHS_COOKIES")
+                    log_area.info("💡 本地运行 scripts/export_cookies.py 导出 cookie 后粘贴到 Secrets")
+                else:
+                    log_area.warning("⚠️ 未登录小红书，正在打开登录页...")
+                    log_area.info("👆 请在浏览器窗口中扫码登录")
+                    if not crawler.login_interactive():
+                        log_area.error("❌ 登录超时，请重试")
+                        crawler.close()
+                        st.stop()
+                    log_area.success("✅ 登录成功！开始抓取...")
+
+            log_area.info(f"🕷️ 正在搜索「{category}」...")
             saved = crawler.crawl(category, count=count, with_comments=with_comments)
             crawler.close()
 

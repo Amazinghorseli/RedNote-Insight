@@ -171,9 +171,11 @@ def _run_insight(query: str) -> dict:
     from src.agents.demand_agent import DemandAggregator
     from src.agents.insight_agent import InsightGenerator
     from src.config import RERANKER_THRESHOLD
-    from src.fetcher import OnDemandFetcher
+    from src.crawler import CrawlerInterface
 
-    MIN_NOTES = 20
+    MIN_NOTES = 10
+    CRAWL_COUNT = 30  # 最少爬取 30 篇
+
     runtime = _runtime
     hybrid_retriever = runtime["hybrid_retriever"]
     reranker = runtime["reranker"]
@@ -194,27 +196,8 @@ def _run_insight(query: str) -> dict:
             report += f"\n\n（注：LLM 生成失败，使用模板兜底。错误：{e}）"
         return report
 
-    # 检索
-    docs = hybrid_retriever.hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
-    if not docs:
-        return {"report": "检索失败，请刷新页面重试。", "notes_count": 0, "generated_count": 0}
-
-    scores = reranker.rerank(query, docs)
-    relevant = [doc for doc, s in zip(docs, scores) if s >= RERANKER_THRESHOLD]
-
-    generated_count = 0
-    if len(relevant) >= MIN_NOTES:
-        report = _do_insight(relevant, query)
-    else:
-        # 数据不足 → 自动抓取
-        fetch_target = MIN_NOTES - len(relevant) + 5
-        fetcher = OnDemandFetcher(raw_dir=raw_dir)
-        generated_count = fetcher.fetch(query, count=fetch_target)
-
-        if generated_count == 0:
-            return {"report": f"抱歉，无法获取「{query}」的相关数据。", "notes_count": 0, "generated_count": 0}
-
-        # 增量入库
+    def _rebuild_indexes():
+        """增量入库 + 重建检索索引"""
         from src.ingestion import incremental_ingest, rebuild_all_chunks
         from rank_bm25 import BM25Okapi
         import jieba
@@ -224,8 +207,8 @@ def _run_insight(query: str) -> dict:
         bm25_new = BM25Okapi(tokenized)
         hr_new = HybridRetriever(runtime["vectorstore"], chunks)
 
-        def bm25_search_new(query, k=3):
-            scores = bm25_new.get_scores(list(jieba.cut(query)))
+        def bm25_search_new(q, k=3):
+            scores = bm25_new.get_scores(list(jieba.cut(q)))
             return [chunks[i] for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]]
 
         runtime["chunks"] = chunks
@@ -236,17 +219,58 @@ def _run_insight(query: str) -> dict:
         from src.graph import build_graph
         runtime["graph"] = build_graph(runtime["vectorstore"], bm25_search_new, hr_new, reranker=reranker)
 
+    # 检索
+    docs = hybrid_retriever.hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
+    if not docs:
+        docs = []
+
+    scores = reranker.rerank(query, docs) if docs else []
+    relevant = [doc for doc, s in zip(docs, scores) if s >= RERANKER_THRESHOLD]
+
+    crawled_count = 0
+    if len(relevant) >= 3:
+        report = _do_insight(relevant, query)
+    else:
+        # 数据不足 → 自动用真实爬虫抓取小红书数据
+        crawler = CrawlerInterface(raw_dir=raw_dir)
+        if not crawler.is_available:
+            return {
+                "report": f"知识库无「{query}」数据，且爬虫不可用。\n\n"
+                          f"💡 请先在命令行运行 `uv run python src/real_crawler.py \"{query}\"` 登录并抓取数据。",
+                "notes_count": 0,
+                "generated_count": 0,
+            }
+
+        result = crawler.crawl(query, count=CRAWL_COUNT)
+        crawled_count = result["count"]
+
+        if crawled_count == 0:
+            return {
+                "report": f"抱歉，无法从小红书获取「{query}」的数据。\n"
+                          f"请检查网络连接，或在命令行手动运行: uv run python src/real_crawler.py \"{query}\"",
+                "notes_count": 0,
+                "generated_count": 0,
+            }
+
+        # 增量入库 + 重建索引
+        _rebuild_indexes()
+
         time.sleep(0.5)
-        fresh_docs = hr_new.hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
-        fresh_scores = reranker.rerank(query, fresh_docs)
+        fresh_docs = runtime["hybrid_retriever"].hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
+        fresh_scores = runtime["reranker"].rerank(query, fresh_docs) if fresh_docs else []
         fresh_relevant = [doc for doc, s in zip(fresh_docs, fresh_scores) if s >= RERANKER_THRESHOLD]
         if not fresh_relevant:
-            return {"report": f"已生成 {generated_count} 篇笔记，但检索仍未匹配。请更换关键词。", "notes_count": 0, "generated_count": generated_count}
+            return {
+                "report": f"已从小红书抓取 {crawled_count} 篇笔记，但检索仍未匹配。请更换关键词。",
+                "notes_count": 0,
+                "generated_count": crawled_count,
+            }
 
         report = _do_insight(fresh_relevant, query)
-        report = f"（📥 已为「{query}」实时生成 {generated_count} 篇新笔记）\n\n{report}"
+        report = f"（📥 已从小红书实时抓取「{query}」{crawled_count} 篇真实笔记）\n\n{report}"
 
-    return {"report": report, "notes_count": len(relevant) if generated_count == 0 else len(fresh_relevant), "generated_count": generated_count}
+    return {"report": report, "notes_count": len(relevant) if crawled_count == 0 else len(fresh_relevant),
+            "generated_count": crawled_count}
 
 
 def _run_qa(question: str, strategy: str = "hybrid") -> str:
@@ -265,11 +289,19 @@ def _run_qa(question: str, strategy: str = "hybrid") -> str:
     })
     response = result["generation"]
 
-    # 没有答案 → 自动抓取
+    # 没有答案 → 自动用真实爬虫抓取小红书数据
     if "无法回答" in response or "根据现有资料" in response:
-        from src.fetcher import OnDemandFetcher
-        fetcher = OnDemandFetcher(raw_dir=runtime["raw_dir"])
-        count = fetcher.fetch(question, count=15)
+        from src.crawler import CrawlerInterface
+        crawler = CrawlerInterface(raw_dir=runtime["raw_dir"])
+
+        if not crawler.is_available:
+            return (f"{response}\n\n"
+                    f"💡 知识库无相关数据。请先在命令行运行:\n"
+                    f"   `uv run python src/real_crawler.py \"{question}\"` 登录并抓取数据。")
+
+        result = crawler.crawl(question, count=30)
+        count = result["count"]
+
         if count > 0:
             # 增量入库 + 重建索引
             from src.ingestion import incremental_ingest, rebuild_all_chunks
@@ -302,9 +334,13 @@ def _run_qa(question: str, strategy: str = "hybrid") -> str:
             })
             response = result["generation"]
             if "无法回答" in response or "根据现有资料" in response:
-                response = f"（📥 已生成 {count} 篇笔记，但检索仍未匹配）\n\n{response}"
+                response = f"（📥 已从小红书抓取 {count} 篇笔记，但检索仍未匹配）\n\n{response}"
             else:
-                response = f"（📥 已为「{question}」实时生成 {count} 篇笔记）\n\n{response}"
+                response = f"（📥 已从小红书实时抓取「{question}」{count} 篇真实笔记）\n\n{response}"
+        else:
+            response = (f"{response}\n\n"
+                        f"💡 自动抓取失败。请手动运行:\n"
+                        f"   `uv run python src/real_crawler.py \"{question}\"`")
 
     return response
 

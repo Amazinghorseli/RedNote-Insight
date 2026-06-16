@@ -1,0 +1,20 @@
+# Streamlit Cloud 系统依赖 — 用于 DrissionPage 无头 Chromium
+chromium-browser
+chromium-codecs-ffmpeg
+libasound2
+libatk-bridge2.0-0
+libatk1.0-0
+libcups2
+libdrm2
+libgbm1
+libgtk-3-0
+libnspr4
+libnss3
+libu2f-udev
+libxcomposite1
+libxdamage1
+libxkbcommon0
+libxrandr2
+xdg-utils
+fonts-noto-color-emoji
+fonts-liberation

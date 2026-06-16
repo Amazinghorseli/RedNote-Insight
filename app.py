@@ -226,26 +226,41 @@ def run_insight_pipeline(query: str, status_placeholder=None) -> str:
         # ✅ 有足够数据（≥20 篇），正常走管道
         return _do_insight(relevant, query)
 
-    # ❌ 数据不足（< 20 篇）→ 🔥 触发实时抓取补齐
+    # ❌ 数据不足（< 20 篇）→ 🔥 触发真实爬虫从小红书抓取
     current_count = len(relevant)
-    fetch_target = MIN_NOTES - current_count + 5  # 多生成 5 篇做缓冲，确保超过 20
+    fetch_target = max(MIN_NOTES - current_count + 5, 30)
 
     if status_placeholder:
         status_placeholder.info(
             f"🔍 品类「**{query}**」当前只有 {current_count} 篇相关笔记，"
-            f"目标 ≥{MIN_NOTES} 篇，正在自动生成 {fetch_target} 篇补充笔记..."
+            f"正在从小红书实时抓取 {fetch_target} 篇笔记..."
         )
 
-    from src.fetcher import OnDemandFetcher
+    from src.crawler import CrawlerInterface
 
-    fetcher = OnDemandFetcher(raw_dir=raw_dir)
-    count = fetcher.fetch(query, count=fetch_target)
+    cookies_json = ""
+    try:
+        cookies_json = st.secrets.get("XHS_COOKIES", "")
+    except Exception:
+        pass
+
+    crawler = CrawlerInterface(raw_dir=raw_dir, cookies_json=cookies_json)
+    if not crawler.is_available:
+        if crawler.is_cloud:
+            return (f"知识库无「{query}」数据，且云端爬虫未配置 Cookie。\n\n"
+                    f"💡 本地运行 `uv run python scripts/export_cookies.py` 导出 cookie，"
+                    f"粘贴到 Streamlit Secrets → XHS_COOKIES")
+        return (f"知识库无「{query}」数据，且爬虫未登录。\n\n"
+                f"💡 请先在命令行运行: `uv run python src/real_crawler.py \"{query}\"` 登录后重试。")
+
+    result = crawler.crawl(query, count=fetch_target)
+    count = result["count"]
 
     if count == 0:
-        return f"抱歉，无法获取「{query}」的相关数据。请检查网络连接和 API 配置。"
+        return f"抱歉，无法从小红书获取「{query}」的数据。请检查网络连接后重试。"
 
     if status_placeholder:
-        status_placeholder.success(f"✅ 已生成 {count} 篇「{query}」笔记，正在入库并分析...")
+        status_placeholder.success(f"✅ 已从小红书抓取 {count} 篇「{query}」真实笔记，正在入库并分析...")
 
     # 增量入库 + 重建索引
     reload_after_fetch()
@@ -260,12 +275,12 @@ def run_insight_pipeline(query: str, status_placeholder=None) -> str:
     fresh_relevant = [doc for doc, s in zip(fresh_docs, fresh_scores) if s >= RERANKER_THRESHOLD]
 
     if not fresh_relevant:
-        return f"已生成 {count} 篇「{query}」笔记，但检索仍未匹配。请稍后重试或更换关键词。"
+        return f"已从小红书抓取 {count} 篇「{query}」笔记，但检索仍未匹配。请稍后重试或更换关键词。"
 
     # 用新数据生成洞察
     report = _do_insight(fresh_relevant, query)
     report = (
-        f"（📥 本次查询为「{query}」实时生成了 {count} 篇新笔记，"
+        f"（📥 已从小红书实时抓取「{query}」{count} 篇真实笔记，"
         f"当前共 {len(fresh_relevant)} 篇相关笔记）\n\n{report}"
     )
     return report
@@ -351,47 +366,57 @@ if mode == "问答模式":
                 })
                 response = result["generation"]
 
-                # 🚀 如果没有答案 → 自动生成品类数据 → 重新检索回答
+                # 🚀 如果没有答案 → 自动从小红书抓取真实数据 → 重新检索回答
                 if "无法回答" in response or "根据现有资料" in response:
-                    from src.fetcher import OnDemandFetcher
+                    from src.crawler import CrawlerInterface
 
                     category = prompt  # 直接用问题作为品类名
-                    status.info(f"🔍 知识库中暂无「{category}」相关信息，正在实时生成笔记...")
+                    status.info(f"🔍 知识库中暂无「{category}」相关信息，正在从小红书实时抓取...")
 
-                    fetcher = OnDemandFetcher(raw_dir=raw_dir)
-                    count = fetcher.fetch(category, count=15)
+                    cookies_json = ""
+                    try:
+                        cookies_json = st.secrets.get("XHS_COOKIES", "")
+                    except Exception:
+                        pass
 
-                    if count > 0:
-                        status.success(f"✅ 已生成 {count} 篇「{category}」笔记，正在重新检索回答...")
-                        reload_after_fetch()
-
-                        import time
-                        time.sleep(0.5)
-
-                        # 使用更新后的 graph 重新问答
-                        fresh_graph = st.session_state.runtime["graph"]
-                        result = fresh_graph.invoke({
-                            "question": prompt,
-                            "rewritten_question": "",
-                            "strategy": strategy if strategy != "auto" else "",
-                            "documents": [],
-                            "relevant_docs": [],
-                            "generation": "",
-                            "retry_count": 0,
-                        })
-                        response = result["generation"]
-
-                        if "无法回答" in response or "根据现有资料" in response:
-                            response = (
-                                f"（📥 已为「{category}」生成 {count} 篇笔记，"
-                                f"但检索仍未匹配到相关信息）\n\n{response}"
-                            )
-                        else:
-                            response = (
-                                f"（📥 已为「{category}」实时生成 {count} 篇笔记作为知识补充）\n\n{response}"
-                            )
+                    crawler = CrawlerInterface(raw_dir=raw_dir, cookies_json=cookies_json)
+                    if not crawler.is_available:
+                        status.warning("⚠️ 爬虫未登录，请先在命令行运行: uv run python src/real_crawler.py \"品类名\"")
                     else:
-                        response = f"抱歉，无法获取「{category}」的相关数据。请检查网络连接和 API 配置。"
+                        result = crawler.crawl(category, count=30)
+                        count = result["count"]
+
+                        if count > 0:
+                            status.success(f"✅ 已从小红书抓取 {count} 篇「{category}」真实笔记，正在重新检索回答...")
+                            reload_after_fetch()
+
+                            import time
+                            time.sleep(0.5)
+
+                            # 使用更新后的 graph 重新问答
+                            fresh_graph = st.session_state.runtime["graph"]
+                            result = fresh_graph.invoke({
+                                "question": prompt,
+                                "rewritten_question": "",
+                                "strategy": strategy if strategy != "auto" else "",
+                                "documents": [],
+                                "relevant_docs": [],
+                                "generation": "",
+                                "retry_count": 0,
+                            })
+                            response = result["generation"]
+
+                            if "无法回答" in response or "根据现有资料" in response:
+                                response = (
+                                    f"（📥 已从小红书抓取 {count} 篇真实笔记，"
+                                    f"但检索仍未匹配到相关信息）\n\n{response}"
+                                )
+                            else:
+                                response = (
+                                    f"（📥 已从小红书实时抓取 {count} 篇真实笔记作为知识补充）\n\n{response}"
+                                )
+                        else:
+                            response = f"抱歉，无法从小红书获取「{category}」的数据。请检查网络连接后重试。"
 
                 st.markdown(response)
 
