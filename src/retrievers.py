@@ -2,6 +2,8 @@
 retrievers.py - 混合检索 + 重排序
 合并自原 step03_hybrid_retriever + step04_reranker
 """
+import asyncio
+
 from src.logger import logger
 from typing import List
 from rank_bm25 import BM25Okapi
@@ -67,6 +69,57 @@ class HybridRetriever:
 
         return [doc_map[rid] for rid in ranked_ids]
 
+    async def ahybrid_search(
+        self,
+        query: str,
+        k: int = 10,
+        bm25_k: int = 25,
+        final_k: int = 10,
+    ) -> list[Document]:
+        """异步版本：RRF 融合检索（FastAPI async 端点使用）
+
+        向量检索和 BM25 检索并行执行，不阻塞事件循环。
+        ChromaDB 目前无原生 async，用 run_in_executor 放到线程池。
+        """
+        loop = asyncio.get_running_loop()
+
+        # 向量检索 → 线程池
+        vector_results = await loop.run_in_executor(
+            None, lambda: self.vectorstore.similarity_search_with_score(query, k=k)
+        )
+
+        # BM25 检索 → 线程池
+        def bm25_work():
+            tokenized_query = list(jieba.cut(query))
+            bm25_scores = self.bm25.get_scores(tokenized_query)
+            return sorted(
+                range(len(bm25_scores)),
+                key=lambda i: bm25_scores[i],
+                reverse=True,
+            )[:bm25_k]
+
+        bm25_indices = await loop.run_in_executor(None, bm25_work)
+
+        # RRF 融合（纯 CPU，很快，不异步）
+        rrf_scores = {}
+        for rank, (doc, _) in enumerate(vector_results):
+            doc_id = doc.metadata.get("source", "") + doc.page_content[:50]
+            rrf_scores[doc_id] = 1.0 / (60 + rank + 1)
+        for rank, idx in enumerate(bm25_indices):
+            doc = self.chunks[idx]
+            doc_id = doc.metadata.get("source", "") + doc.page_content[:50]
+            rrf_scores[doc_id] = rrf_scores.get(doc_id, 0) + 1.0 / (60 + rank + 1)
+
+        ranked_ids = sorted(rrf_scores, key=lambda x: rrf_scores[x], reverse=True)[:final_k]
+
+        doc_map = {}
+        for doc, _ in vector_results:
+            doc_map[doc.metadata.get("source", "") + doc.page_content[:50]] = doc
+        for doc in self.chunks:
+            doc_map[doc.metadata.get("source", "") + doc.page_content[:50]] = doc
+
+        return [doc_map[rid] for rid in ranked_ids]
+
 
 class APIReranker:
     """CrossEncoder 重排序器（通过 SiliconFlow API）
@@ -104,6 +157,38 @@ class APIReranker:
         data = resp.json()
 
         # 将结果映射回原始顺序
+        scores = [0.0] * len(documents)
+        for result in data.get("results", []):
+            scores[result["index"]] = result["relevance_score"]
+
+        return scores
+
+    async def arerank(self, query: str, documents: list[Document]) -> list[float]:
+        """异步版本：对 query 和每篇 doc 做相关性打分（httpx 替代 requests）
+
+        FastAPI async 端点使用，避免阻塞事件循环。
+        同步版本 rerank() 保留以兼容 Streamlit 等场景。
+        """
+        import httpx
+
+        contents = [d.page_content[:1000] for d in documents]
+        payload = {
+            "model": self.model,
+            "query": query,
+            "documents": contents,
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{self.base_url}/rerank", headers=headers, json=payload
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
         scores = [0.0] * len(documents)
         for result in data.get("results", []):
             scores[result["index"]] = result["relevance_score"]
