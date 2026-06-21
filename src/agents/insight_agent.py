@@ -127,6 +127,55 @@ class InsightGenerator:
         response = self.llm.invoke(msg)
         return response.content.strip()
 
+    async def agenerate(self, aggregated: dict, category: str = "") -> str:
+        """异步版本：输入聚合结果，输出结构化洞察报告"""
+        if aggregated["note_count"] == 0:
+            return "没有足够的评论数据生成洞察报告。"
+
+        complaints_str = "\n".join(
+            f"  {i+1}. 「{c}」出现 {f} 次"
+            for i, (c, f) in enumerate(aggregated["top_complaints"][:10])
+        ) or "  暂无"
+
+        intents_str = "\n".join(
+            f"  {i+1}. 「{t}」出现 {f} 次"
+            for i, (t, f) in enumerate(aggregated["top_purchase_intents"][:10])
+        ) or "  暂无"
+
+        comparisons_str = "\n".join(
+            f"  - {c}" for c in aggregated["comparison_patterns"][:10]
+        ) or "  暂无"
+
+        brands_str = ", ".join(aggregated["related_brands"]) or "暂无"
+        differentiations_str = ", ".join(aggregated.get("differentiation_directions", [])) or "暂无"
+
+        msg = self.report_prompt.format_messages(
+            category=category or "未分类",
+            note_count=aggregated["note_count"],
+            avg_likes=aggregated["avg_likes"],
+            total_ask_link=aggregated["total_ask_link"],
+            evergreen_ratio=int(aggregated.get("evergreen_ratio", 0.8) * 100),
+            avg_price=aggregated.get("avg_price", 0),
+            avg_cost=aggregated.get("avg_cost", 0),
+            price_cost_ratio=aggregated.get("price_cost_ratio", 3),
+            profit_margin=int(aggregated.get("avg_profit_margin", 0.6) * 100),
+            avg_weight=aggregated.get("avg_weight", 0.3),
+            profit_score=aggregated.get("profit_score", 0),
+            logistics_score=aggregated.get("logistics_score", 0),
+            competition_score=aggregated.get("competition_score", 0),
+            demand_score=aggregated.get("demand_score", 0),
+            selection_score=aggregated.get("selection_score", 0),
+            complaints=complaints_str,
+            intents=intents_str,
+            comparisons=comparisons_str,
+            brands=brands_str,
+            differentiations=differentiations_str,
+            monthly_sales=aggregated.get("estimated_monthly_sales", 0),
+        )
+
+        response = await self.llm.ainvoke(msg)
+        return response.content.strip()
+
     def generate_stream(self, aggregated: dict, category: str = "") -> str:
         """
         流式版本：逐 token 生成洞察报告。

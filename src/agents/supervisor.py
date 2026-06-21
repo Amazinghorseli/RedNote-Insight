@@ -25,10 +25,20 @@ class Supervisor:
         ])
 
     def decide(self, question: str, available_strategies: list[str]) -> str:
-        """返回选中的策略名"""
+        """返回选中的策略名（同步版本）"""
         msg = self.prompt.format_messages(question=question)
         strategy = self.llm.invoke(msg).content.strip().lower()
         if strategy not in available_strategies:
             strategy = "hybrid"
         logger.info(f"Supervisor 策略: {strategy}")
+        return strategy
+
+    async def adecide(self, question: str, available_strategies: list[str]) -> str:
+        """返回选中的策略名（异步版本）"""
+        msg = self.prompt.format_messages(question=question)
+        response = await self.llm.ainvoke(msg)
+        strategy = response.content.strip().lower()
+        if strategy not in available_strategies:
+            strategy = "hybrid"
+        logger.info(f"Supervisor 策略(异步): {strategy}")
         return strategy

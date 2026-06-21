@@ -1,26 +1,29 @@
 """
-api.py — 小红书爆款雷达 FastAPI 后端
-=====================================
-Phase 1: 完整 API + 前端页面托管
-Phase 2: 接入真实爬虫替换假数据
+api.py — 小红书爆款雷达 FastAPI 后端 (Day 3: AppState DI + async graph)
+======================================================================
+- AppState 替代全局 _runtime，通过 Depends 注入
+- graph.ainvoke() 替代 asyncio.to_thread(graph.invoke, ...)
+- 全链路异步化
 
-启动: uv run uvicorn api:app --reload --port 8000
+启动: uv run uvicorn api:app --port 8000
 """
 import os
 import sys
-import json
 import time
 import asyncio
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-# 确保能导入项目模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from src.core.state import AppState, init_app_state
+from src.api.dependencies import get_app_state
+
 
 # ============================================================
 # 请求/响应模型
@@ -31,10 +34,10 @@ class InsightRequest(BaseModel):
 
 class QARequest(BaseModel):
     question: str
-    strategy: str = "hybrid"  # auto / vector / keyword / hybrid
+    strategy: str = "hybrid"
 
 class EvaluateRequest(BaseModel):
-    categories: list[str] = []  # 为空则评估全部品类
+    categories: list[str] = []
 
 class CrawlRequest(BaseModel):
     category: str
@@ -66,19 +69,16 @@ class StatsResponse(BaseModel):
 # 应用生命周期
 # ============================================================
 
-_runtime = None  # 全局运行时状态
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用启动时初始化，关闭时清理"""
-    global _runtime
+    """应用启动时初始化 AppState，关闭时清理"""
     print("[API] Initializing runtime...")
-    _runtime = _init_runtime()
-    if _runtime["error"]:
-        print(f"[API] WARNING: {_runtime['error']}")
+    app.state.app_state = await init_app_state()
+    state = app.state.app_state
+    if state.error:
+        print(f"[API] WARNING: {state.error}")
     else:
-        print(f"[API] READY - {_runtime['stats']['total_chunks']} chunks")
+        print(f"[API] READY — {state.stats['total_chunks']} chunks")
     yield
     print("[API] Shutting down")
 
@@ -86,199 +86,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="小红书爆款雷达 API",
     description="翻评论、找痛点、定方向 — AI 选品洞察引擎",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
 
 # ============================================================
-# 初始化逻辑（复用原有代码）
+# 业务逻辑
 # ============================================================
 
-def _init_runtime() -> dict:
-    """初始化向量库、检索器、LangGraph"""
-    from src.retrievers import HybridRetriever, APIReranker
-    from src.graph import build_graph
-    from rank_bm25 import BM25Okapi
-    import jieba
-    from src.ingestion import load_raw_documents, chunk_documents, load_vectorstore, build_vectorstore
-
-    project_root = os.path.dirname(os.path.abspath(__file__))
-    raw_dir = os.path.join(project_root, "data", "raw")
-    chroma_dir = os.path.join(project_root, "data", "chroma_db")
-    chroma_db_file = os.path.join(chroma_dir, "chroma.sqlite3")
-
-    # 检查数据
-    raw_files = [f for f in os.listdir(raw_dir) if f.endswith((".txt", ".md"))] if os.path.exists(raw_dir) else []
-    if not raw_files:
-        return {"error": "暂无数据，请用 generate_data.py 生成数据后刷新"}
-
-    # 加载或构建向量库
-    if os.path.exists(chroma_db_file):
-        vectorstore = load_vectorstore()
-    else:
-        docs = load_raw_documents()
-        chunks = chunk_documents(docs)
-        vectorstore = build_vectorstore(chunks)
-
-    reranker = APIReranker()
-
-    # 加载全部 chunk
-    from src.ingestion import rebuild_all_chunks
-    chunks = rebuild_all_chunks(raw_dir)
-
-    # BM25 索引
-    tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
-    bm25 = BM25Okapi(tokenized)
-
-    hybrid_retriever = HybridRetriever(vectorstore, chunks)
-
-    def bm25_search(query: str, k: int = 3):
-        tokenized_query = list(jieba.cut(query))
-        scores = bm25.get_scores(tokenized_query)
-        top_idx = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
-        return [chunks[i] for i in top_idx]
-
-    graph = build_graph(vectorstore, bm25_search, hybrid_retriever, reranker=reranker)
-
-    # 统计
-    categories = list(set(
-        d.metadata.get("category", "未分类")
-        for d in chunks
-    ))
-
-    return {
-        "error": None,
-        "vectorstore": vectorstore,
-        "chunks": chunks,
-        "bm25": bm25,
-        "hybrid_retriever": hybrid_retriever,
-        "bm25_search": bm25_search,
-        "graph": graph,
-        "reranker": reranker,
-        "raw_dir": raw_dir,
-        "chroma_dir": chroma_dir,
-        "stats": {
-            "categories": categories,
-            "total_notes": len(raw_files),
-            "total_chunks": len(chunks),
-        },
-    }
-
-
-def _run_insight(query: str) -> dict:
-    """执行洞察管道，返回报告"""
-    from src.agents.comment_agent import CommentAnalyzer
-    from src.agents.demand_agent import DemandAggregator
-    from src.agents.insight_agent import InsightGenerator
-    from src.config import RERANKER_THRESHOLD
-    from src.crawler import CrawlerInterface
-
-    MIN_NOTES = 10
-    CRAWL_COUNT = 30  # 最少爬取 30 篇
-
-    runtime = _runtime
-    hybrid_retriever = runtime["hybrid_retriever"]
-    reranker = runtime["reranker"]
-    raw_dir = runtime["raw_dir"]
-
-    def _do_insight(docs, category):
-        analyzer = CommentAnalyzer(raw_dir=raw_dir)
-        analyses = analyzer.analyze(docs)
-        if not analyses:
-            return "没有找到评论分析数据。"
-        aggregator = DemandAggregator()
-        aggregated = aggregator.aggregate(analyses)
-        generator = InsightGenerator()
-        try:
-            report = generator.generate(aggregated, category=category)
-        except Exception as e:
-            report = generator.generate_fallback(aggregated, category=category)
-            report += f"\n\n（注：LLM 生成失败，使用模板兜底。错误：{e}）"
-        return report
-
-    def _rebuild_indexes():
-        """增量入库 + 重建检索索引"""
-        from src.ingestion import incremental_ingest, rebuild_all_chunks
-        from rank_bm25 import BM25Okapi
-        import jieba
-        incremental_ingest(raw_dir, runtime["vectorstore"])
-        chunks = rebuild_all_chunks(raw_dir)
-        tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
-        bm25_new = BM25Okapi(tokenized)
-        hr_new = HybridRetriever(runtime["vectorstore"], chunks)
-
-        def bm25_search_new(q, k=3):
-            scores = bm25_new.get_scores(list(jieba.cut(q)))
-            return [chunks[i] for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]]
-
-        runtime["chunks"] = chunks
-        runtime["bm25"] = bm25_new
-        runtime["hybrid_retriever"] = hr_new
-        runtime["bm25_search"] = bm25_search_new
-
-        from src.graph import build_graph
-        runtime["graph"] = build_graph(runtime["vectorstore"], bm25_search_new, hr_new, reranker=reranker)
-
-    # 检索
-    docs = hybrid_retriever.hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
-    if not docs:
-        docs = []
-
-    scores = reranker.rerank(query, docs) if docs else []
-    relevant = [doc for doc, s in zip(docs, scores) if s >= RERANKER_THRESHOLD]
-
-    crawled_count = 0
-    if len(relevant) >= 3:
-        report = _do_insight(relevant, query)
-    else:
-        # 数据不足 → 自动用真实爬虫抓取小红书数据
-        crawler = CrawlerInterface(raw_dir=raw_dir)
-        if not crawler.is_available:
-            return {
-                "report": f"知识库无「{query}」数据，且爬虫不可用。\n\n"
-                          f"💡 请先在命令行运行 `uv run python src/real_crawler.py \"{query}\"` 登录并抓取数据。",
-                "notes_count": 0,
-                "generated_count": 0,
-            }
-
-        result = crawler.crawl(query, count=CRAWL_COUNT)
-        crawled_count = result["count"]
-
-        if crawled_count == 0:
-            return {
-                "report": f"抱歉，无法从小红书获取「{query}」的数据。\n"
-                          f"请检查网络连接，或在命令行手动运行: uv run python src/real_crawler.py \"{query}\"",
-                "notes_count": 0,
-                "generated_count": 0,
-            }
-
-        # 增量入库 + 重建索引
-        _rebuild_indexes()
-
-        time.sleep(0.5)
-        fresh_docs = runtime["hybrid_retriever"].hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
-        fresh_scores = runtime["reranker"].rerank(query, fresh_docs) if fresh_docs else []
-        fresh_relevant = [doc for doc, s in zip(fresh_docs, fresh_scores) if s >= RERANKER_THRESHOLD]
-        if not fresh_relevant:
-            return {
-                "report": f"已从小红书抓取 {crawled_count} 篇笔记，但检索仍未匹配。请更换关键词。",
-                "notes_count": 0,
-                "generated_count": crawled_count,
-            }
-
-        report = _do_insight(fresh_relevant, query)
-        report = f"（📥 已从小红书实时抓取「{query}」{crawled_count} 篇真实笔记）\n\n{report}"
-
-    return {"report": report, "notes_count": len(relevant) if crawled_count == 0 else len(fresh_relevant),
-            "generated_count": crawled_count}
-
-
-async def _run_insight_async(query: str) -> dict:
-    """执行洞察管道，返回报告（异步版本）
-
-    检索和重排序使用 async 方法避免阻塞事件循环。
-    """
+async def _run_insight_async(query: str, state: AppState) -> dict:
+    """执行洞察管道（全异步）"""
     from src.agents.comment_agent import CommentAnalyzer
     from src.agents.demand_agent import DemandAggregator
     from src.agents.insight_agent import InsightGenerator
@@ -288,13 +106,8 @@ async def _run_insight_async(query: str) -> dict:
     MIN_NOTES = 10
     CRAWL_COUNT = 30
 
-    runtime = _runtime
-    hybrid_retriever = runtime["hybrid_retriever"]
-    reranker = runtime["reranker"]
-    raw_dir = runtime["raw_dir"]
-
-    def _do_insight(docs, category):
-        analyzer = CommentAnalyzer(raw_dir=raw_dir)
+    async def _do_insight(docs, category):
+        analyzer = CommentAnalyzer(raw_dir=state.raw_dir)
         analyses = analyzer.analyze(docs)
         if not analyses:
             return "没有找到评论分析数据。"
@@ -302,49 +115,24 @@ async def _run_insight_async(query: str) -> dict:
         aggregated = aggregator.aggregate(analyses)
         generator = InsightGenerator()
         try:
-            report = generator.generate(aggregated, category=category)
+            report = await generator.agenerate(aggregated, category=category)
         except Exception as e:
             report = generator.generate_fallback(aggregated, category=category)
             report += f"\n\n（注：LLM 生成失败，使用模板兜底。错误：{e}）"
         return report
 
-    def _rebuild_indexes():
-        """同步辅助：增量入库 + 重建索引。由 asyncio.to_thread 调用。"""
-        from src.ingestion import incremental_ingest, rebuild_all_chunks
-        from rank_bm25 import BM25Okapi
-        import jieba
-        incremental_ingest(raw_dir, runtime["vectorstore"])
-        chunks = rebuild_all_chunks(raw_dir)
-        tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
-        bm25_new = BM25Okapi(tokenized)
-        hr_new = HybridRetriever(runtime["vectorstore"], chunks)
-
-        def bm25_search_new(q, k=3):
-            scores = bm25_new.get_scores(list(jieba.cut(q)))
-            return [chunks[i] for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]]
-
-        runtime["chunks"] = chunks
-        runtime["bm25"] = bm25_new
-        runtime["hybrid_retriever"] = hr_new
-        runtime["bm25_search"] = bm25_search_new
-
-        from src.graph import build_graph
-        runtime["graph"] = build_graph(runtime["vectorstore"], bm25_search_new, hr_new, reranker=reranker)
-
-    # ✅ 异步检索
-    docs = await hybrid_retriever.ahybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
+    docs = await state.hybrid_retriever.ahybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
     if not docs:
         docs = []
 
-    # ✅ 异步重排序
-    scores = await reranker.arerank(query, docs) if docs else []
+    scores = await state.reranker.arerank(query, docs) if docs else []
     relevant = [doc for doc, s in zip(docs, scores) if s >= RERANKER_THRESHOLD]
 
     crawled_count = 0
     if len(relevant) >= 3:
-        report = _do_insight(relevant, query)
+        report = await _do_insight(relevant, query)
     else:
-        crawler = CrawlerInterface(raw_dir=raw_dir)
+        crawler = CrawlerInterface(raw_dir=state.raw_dir)
         if not crawler.is_available:
             return {
                 "report": f"知识库无「{query}」数据，且爬虫不可用。\n\n"
@@ -363,13 +151,13 @@ async def _run_insight_async(query: str) -> dict:
                 "generated_count": 0,
             }
 
-        await asyncio.to_thread(_rebuild_indexes)
+        await state.rebuild_indexes()
         await asyncio.sleep(0.5)
 
-        fresh_docs = await runtime["hybrid_retriever"].ahybrid_search(
+        fresh_docs = await state.hybrid_retriever.ahybrid_search(
             query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES
         )
-        fresh_scores = await runtime["reranker"].arerank(query, fresh_docs) if fresh_docs else []
+        fresh_scores = await state.reranker.arerank(query, fresh_docs) if fresh_docs else []
         fresh_relevant = [doc for doc, s in zip(fresh_docs, fresh_scores) if s >= RERANKER_THRESHOLD]
         if not fresh_relevant:
             return {
@@ -378,49 +166,19 @@ async def _run_insight_async(query: str) -> dict:
                 "generated_count": crawled_count,
             }
 
-        report = _do_insight(fresh_relevant, query)
+        report = await _do_insight(fresh_relevant, query)
         report = f"（📥 已从小红书实时抓取「{query}」{crawled_count} 篇真实笔记）\n\n{report}"
 
-    return {"report": report, "notes_count": len(relevant) if crawled_count == 0 else len(fresh_relevant),
-            "generated_count": crawled_count}
+    return {
+        "report": report,
+        "notes_count": len(relevant) if crawled_count == 0 else len(fresh_relevant),
+        "generated_count": crawled_count,
+    }
 
 
-def _rebuild_indexes_qa(runtime: dict, raw_dir: str):
-    """同步辅助函数：增量入库 + 重建 BM25/HybridRetriever/Graph 索引
-
-    由 _run_qa 通过 asyncio.to_thread 调用，避免阻塞事件循环。
-    Day 4 会统一迁移到 AppState。
-    """
-    from src.ingestion import incremental_ingest, rebuild_all_chunks
-    from rank_bm25 import BM25Okapi
-    from src.retrievers import HybridRetriever
-    import jieba
-
-    incremental_ingest(raw_dir, runtime["vectorstore"])
-    chunks = rebuild_all_chunks(raw_dir)
-    tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
-    bm25_new = BM25Okapi(tokenized)
-    hr = HybridRetriever(runtime["vectorstore"], chunks)
-
-    def bms(q, k=3):
-        scores = bm25_new.get_scores(list(jieba.cut(q)))
-        return [chunks[i] for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]]
-
-    runtime["chunks"] = chunks
-    runtime["bm25"] = bm25_new
-    runtime["hybrid_retriever"] = hr
-    runtime["bm25_search"] = bms
-
-    from src.graph import build_graph
-    runtime["graph"] = build_graph(runtime["vectorstore"], bms, hr, reranker=runtime["reranker"])
-
-
-def _run_qa_sync(question: str, strategy: str = "hybrid") -> str:
-    """执行 QA 管道（同步版本，供 evaluation 等场景使用）"""
-    runtime = _runtime
-    graph = runtime["graph"]
-
-    result = graph.invoke({
+async def _run_qa(question: str, state: AppState, strategy: str = "hybrid") -> str:
+    """执行 QA 管道（全异步，graph.ainvoke()）"""
+    result = await state.graph.ainvoke({
         "question": question,
         "rewritten_question": "",
         "strategy": strategy if strategy != "auto" else "",
@@ -429,76 +187,35 @@ def _run_qa_sync(question: str, strategy: str = "hybrid") -> str:
         "generation": "",
         "retry_count": 0,
     })
-    return result["generation"]
+    response = result["generation"]
 
-
-async def _run_qa(question: str, strategy: str = "hybrid") -> str:
-    """执行 QA 管道（异步版本）
-
-    通过 asyncio.to_thread 把同步 graph.invoke 放到线程池，
-    避免阻塞 FastAPI 事件循环。Day 3 会改用 graph.ainvoke()。
-    爬虫兜底逻辑暂时走同步路径（_run_qa_sync）。
-    """
-    runtime = _runtime
-    graph = runtime["graph"]
-
-    result = await asyncio.to_thread(
-        graph.invoke,
-        {
+    if "无法回答" in response or "根据现有资料" in response:
+        result = await state.graph.ainvoke({
             "question": question,
             "rewritten_question": "",
-            "strategy": strategy if strategy != "auto" else "",
+            "strategy": "hybrid",
             "documents": [],
             "relevant_docs": [],
             "generation": "",
             "retry_count": 0,
-        },
-    )
-    response = result["generation"]
-
-    # 兜底：走原来的同步爬虫路径（Day 4 统一重构）
-    if "无法回答" in response or "根据现有资料" in response:
-        return _run_qa_sync(question, strategy)
+        })
+        response = result["generation"]
 
     return response
 
 
 # ============================================================
-# API 路由
+# API 路由（全部通过 Depends 注入 AppState）
 # ============================================================
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "version": "1.0.0"}
-
-
-@app.get("/api/debug")
-async def debug():
-    """临时调试端点"""
-    import traceback
-    try:
-        if _runtime is None:
-            return {"error": "_runtime is None"}
-        return {
-            "runtime_type": str(type(_runtime)),
-            "has_error": _runtime.get("error"),
-            "keys": list(_runtime.keys()) if isinstance(_runtime, dict) else "not a dict",
-        }
-    except Exception as e:
-        return {"exception": str(e), "traceback": traceback.format_exc()}
+    return {"status": "ok", "version": "2.0.0"}
 
 
 @app.get("/api/stats", response_model=StatsResponse)
-async def get_stats():
-    if _runtime is None or _runtime.get("error"):
-        return StatsResponse(
-            success=False,
-            categories=[],
-            total_notes=0,
-            total_chunks=0,
-            message=_runtime.get("error", "未初始化") if _runtime else "未初始化",
-        )
-    stats = _runtime["stats"]
+async def get_stats(state: AppState = Depends(get_app_state)):
+    stats = state.stats
     return StatsResponse(
         success=True,
         categories=stats["categories"],
@@ -509,12 +226,9 @@ async def get_stats():
 
 
 @app.post("/api/insight", response_model=InsightResponse)
-async def run_insight(req: InsightRequest):
-    if _runtime is None or _runtime.get("error"):
-        raise HTTPException(status_code=503, detail=_runtime.get("error", "服务未就绪") if _runtime else "服务未就绪")
-
+async def run_insight(req: InsightRequest, state: AppState = Depends(get_app_state)):
     t0 = time.time()
-    result = await _run_insight_async(req.category)
+    result = await _run_insight_async(req.category, state)
     elapsed = round(time.time() - t0, 2)
 
     return InsightResponse(
@@ -528,12 +242,9 @@ async def run_insight(req: InsightRequest):
 
 
 @app.post("/api/qa", response_model=QAResponse)
-async def run_qa(req: QARequest):
-    if _runtime is None or _runtime.get("error"):
-        raise HTTPException(status_code=503, detail=_runtime.get("error", "服务未就绪") if _runtime else "服务未就绪")
-
+async def run_qa(req: QARequest, state: AppState = Depends(get_app_state)):
     t0 = time.time()
-    answer = await _run_qa(req.question, req.strategy)
+    answer = await _run_qa(req.question, state, req.strategy)
     elapsed = round(time.time() - t0, 2)
 
     return QAResponse(
@@ -545,16 +256,26 @@ async def run_qa(req: QARequest):
 
 
 @app.post("/api/evaluate")
-async def run_evaluation(req: EvaluateRequest):
-    """运行 RAGAS 评估并返回指标"""
-    if _runtime is None or _runtime.get("error"):
-        raise HTTPException(status_code=503, detail=_runtime.get("error", "服务未就绪") if _runtime else "服务未就绪")
-
+async def run_evaluation(req: EvaluateRequest, state: AppState = Depends(get_app_state)):
+    """运行 RAGAS 评估"""
     from src.evaluation import RAGEvaluator
+
+    def _qa_sync(q: str, s: str = "hybrid") -> str:
+        result = state.graph.invoke({
+            "question": q,
+            "rewritten_question": "",
+            "strategy": s if s != "auto" else "",
+            "documents": [],
+            "relevant_docs": [],
+            "generation": "",
+            "retry_count": 0,
+        })
+        return result["generation"]
+
     evaluator = RAGEvaluator(
-        qa_func=_run_qa_sync,
-        hybrid_retriever=_runtime["hybrid_retriever"],
-        reranker=_runtime["reranker"],
+        qa_func=_qa_sync,
+        hybrid_retriever=state.hybrid_retriever,
+        reranker=state.reranker,
     )
 
     categories = req.categories or None
@@ -572,18 +293,16 @@ async def run_evaluation(req: EvaluateRequest):
 
 
 @app.post("/api/crawl")
-async def trigger_crawl(req: CrawlRequest):
-    """触发数据抓取 — 优先使用真实爬虫，不可用时降级为 LLM 生成"""
+async def trigger_crawl(req: CrawlRequest, state: AppState = Depends(get_app_state)):
+    """触发数据抓取"""
     from src.crawler import CrawlerInterface
-    crawler = CrawlerInterface(raw_dir=_runtime["raw_dir"])
+    crawler = CrawlerInterface(raw_dir=state.raw_dir)
 
     result = await asyncio.to_thread(crawler.crawl, req.category, req.count)
 
     if result["count"] > 0:
-        # 增量入库 + 重建索引（放到线程池）
-        raw_dir = _runtime["raw_dir"]
-        await asyncio.to_thread(_rebuild_indexes_qa, _runtime, raw_dir)
-        _runtime["stats"]["total_notes"] = len(os.listdir(raw_dir))
+        await state.rebuild_indexes()
+        state.stats["total_notes"] = len(os.listdir(state.raw_dir))
 
     return JSONResponse(content={
         "success": result["count"] > 0,
@@ -594,7 +313,7 @@ async def trigger_crawl(req: CrawlRequest):
 
 
 # ============================================================
-# 静态文件托管（前端 SPA）
+# 静态文件托管
 # ============================================================
 
 static_dir = Path(__file__).parent / "static"
@@ -602,11 +321,9 @@ static_dir = Path(__file__).parent / "static"
 
 @app.get("/")
 async def serve_frontend():
-    """托管前端页面"""
     return FileResponse(static_dir / "index.html")
 
 
-# 挂载静态资源
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
