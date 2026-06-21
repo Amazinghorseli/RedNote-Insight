@@ -167,6 +167,30 @@ class AppState:
             "total_chunks": len(self.chunks),
         }
 
+    # ================================================================
+    # 同步方法（供 Streamlit 等同步框架使用）
+    # ================================================================
+
+    def init_sync(self) -> None:
+        """同步初始化（供 Streamlit 使用）
+
+        Streamlit 不支持 async，但 AppState.initialize() 是 async 的。
+        通过新建事件循环桥接。
+        """
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(self.initialize())
+        finally:
+            loop.close()
+
+    def rebuild_sync(self) -> None:
+        """同步重建索引（供 Streamlit 使用）"""
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(self.rebuild_indexes())
+        finally:
+            loop.close()
+
 
 async def init_app_state() -> AppState:
     """创建并初始化 AppState（供 lifespan 使用）"""

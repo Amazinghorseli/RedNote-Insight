@@ -1,12 +1,13 @@
 """
 app.py - 小红书爆款雷达（Streamlit 入口）
-Phase 1: 基础 RAG 问答
-Phase 3: 评论区需求挖掘洞察模式
-Phase 4: 查询时自动抓取 — 知识库没有就现场生成
+===========================================
+Day 4 重构：删除了与 AppState 重复的 build_runtime / reload_after_fetch 逻辑，
+改用 AppState 统一管理运行时状态。
 """
 import streamlit as st
 import sys
 import os
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -16,175 +17,46 @@ st.markdown("---")
 
 
 # ======================================================================
-# 第一部分：一次性初始化（缓存）
+# 第一部分：初始化（委托给 AppState）
 # ======================================================================
 
 @st.cache_resource
-def init_base():
-    """缓存：Embedding / Reranker 等不需要随数据变化而变化的对象"""
-    from src.ingestion import load_raw_documents, chunk_documents, load_vectorstore, build_vectorstore, rebuild_all_chunks
-    from src.retrievers import APIReranker
+def init_app_state_sync():
+    """Streamlit cache_resource 装饰器确保只执行一次。
 
-    project_root = os.path.dirname(os.path.abspath(__file__))
-    raw_dir = os.path.join(project_root, "data", "raw")
-    chroma_dir = os.path.join(project_root, "data", "chroma_db")
-    chroma_db_file = os.path.join(chroma_dir, "chroma.sqlite3")
-
-    # 检查数据是否存在
-    raw_files = [f for f in os.listdir(raw_dir) if f.endswith((".txt", ".md"))] if os.path.exists(raw_dir) else []
-    if not raw_files:
-        return None, "暂无数据，请用 generate_data.py 生成数据后刷新页面。"
-
-    # 加载或构建向量库
-    if os.path.exists(chroma_db_file):
-        vectorstore = load_vectorstore()
-    else:
-        docs = load_raw_documents()
-        chunks = chunk_documents(docs)
-        vectorstore = build_vectorstore(chunks)
-
-    # Reranker（CrossEncoder API，不随数据变化）
-    reranker = APIReranker()
-
-    return {
-        "vectorstore": vectorstore,
-        "reranker": reranker,
-        "raw_dir": raw_dir,
-        "chroma_dir": chroma_dir,
-    }, None
-
-
-# ======================================================================
-# 第二部分：可变运行时状态（存储在 session_state，支持动态更新）
-# ======================================================================
-
-def build_runtime(base: dict):
-    """从当前磁盘数据构建 BM25 / HybridRetriever / LangGraph"""
-    from src.ingestion import rebuild_all_chunks
-    from src.retrievers import HybridRetriever
-    from src.graph import build_graph
-    from rank_bm25 import BM25Okapi
-    import jieba
-
-    vectorstore = base["vectorstore"]
-    raw_dir = base["raw_dir"]
-    reranker = base["reranker"]
-
-    # 加载全部文档 + chunk
-    chunks = rebuild_all_chunks(raw_dir)
-
-    # BM25 索引
-    tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
-    bm25 = BM25Okapi(tokenized)
-
-    # HybridRetriever
-    hybrid_retriever = HybridRetriever(vectorstore, chunks)
-
-    # BM25 搜索函数
-    def bm25_search(query: str, k: int = 3):
-        tokenized_query = list(jieba.cut(query))
-        scores = bm25.get_scores(tokenized_query)
-        top_idx = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
-        return [chunks[i] for i in top_idx]
-
-    # LangGraph
-    graph = build_graph(vectorstore, bm25_search, hybrid_retriever, reranker=reranker)
-
-    return {
-        "chunks": chunks,
-        "bm25": bm25,
-        "hybrid_retriever": hybrid_retriever,
-        "bm25_search": bm25_search,
-        "graph": graph,
-    }
-
-
-def reload_after_fetch():
+    AppState.init_sync() 内部新建事件循环运行 async 初始化。
     """
-    当 fetcher 写入了新数据后调用此函数：
-    增量入库 → 重建 chunk → 重建 BM25/Hybrid/Graph
-    """
-    from src.ingestion import incremental_ingest, rebuild_all_chunks
-    from src.retrievers import HybridRetriever
-    from src.graph import build_graph
-    from rank_bm25 import BM25Okapi
-    import jieba
-
-    base = st.session_state.base
-    vectorstore = base["vectorstore"]
-    raw_dir = base["raw_dir"]
-    reranker = base["reranker"]
-
-    # 增量入库
-    incremental_ingest(raw_dir, vectorstore)
-
-    # 重建全部 chunks（新老数据一起）
-    chunks = rebuild_all_chunks(raw_dir)
-
-    # BM25
-    tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
-    bm25 = BM25Okapi(tokenized)
-
-    # Hybrid
-    hybrid_retriever = HybridRetriever(vectorstore, chunks)
-
-    def bm25_search(query: str, k: int = 3):
-        tokenized_query = list(jieba.cut(query))
-        scores = bm25.get_scores(tokenized_query)
-        top_idx = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
-        return [chunks[i] for i in top_idx]
-
-    # Graph
-    graph = build_graph(vectorstore, bm25_search, hybrid_retriever, reranker=reranker)
-
-    # 更新 session_state
-    st.session_state.runtime = {
-        "chunks": chunks,
-        "bm25": bm25,
-        "hybrid_retriever": hybrid_retriever,
-        "bm25_search": bm25_search,
-        "graph": graph,
-    }
-    st.session_state.data_version += 1
+    from src.core.state import AppState
+    state = AppState()
+    state.init_sync()
+    if state.error:
+        return state, state.error
+    return state, None
 
 
-# ======================================================================
-# 初始化入口
-# ======================================================================
-
-base, error = init_base()
+state, error = init_app_state_sync()
 if error:
     st.warning(error)
     st.info("提示: 运行 `python generate_data.py` 生成演示数据。")
     st.stop()
 
-# 保持 base 在 session_state（供 reload_after_fetch 使用）
-if "base" not in st.session_state:
-    st.session_state.base = base
 
-# 初次或刷新时构建运行时
-if "runtime" not in st.session_state:
-    st.session_state.runtime = build_runtime(base)
+if "data_version" not in st.session_state:
     st.session_state.data_version = 0
 
-runtime = st.session_state.runtime
-graph = runtime["graph"]
-hybrid_retriever = runtime["hybrid_retriever"]
-chunks = runtime["chunks"]
-raw_dir = base["raw_dir"]
-reranker = base["reranker"]
+graph = state.graph
+hybrid_retriever = state.hybrid_retriever
+chunks = state.chunks
+raw_dir = state.raw_dir
+reranker = state.reranker
 
 
 # ======================================================================
-# 第三部分：洞察管道（核心变更：无匹配 → 自动抓取）
+# 第二部分：洞察管道
 # ======================================================================
 
 def run_insight_pipeline(query: str, status_placeholder=None, stream: bool = False):
-    """
-    完整的洞察流程。
-    stream=False: 返回完整字符串（API 模式）
-    stream=True: 返回生成器，在生成阶段逐 token yield（Streamlit 流式输出）
-    """
+    """完整洞察流程（同步，Streamlit 环境）"""
     from src.agents.comment_agent import CommentAnalyzer
     from src.agents.demand_agent import DemandAggregator
     from src.agents.insight_agent import InsightGenerator
@@ -194,7 +66,6 @@ def run_insight_pipeline(query: str, status_placeholder=None, stream: bool = Fal
     generator = InsightGenerator()
 
     def _do_insight(docs, category):
-        """文档 → 分析 → 聚合 → 报告（非流式）"""
         analyzer = CommentAnalyzer(raw_dir=raw_dir)
         analyses = analyzer.analyze(docs)
         if not analyses:
@@ -210,20 +81,16 @@ def run_insight_pipeline(query: str, status_placeholder=None, stream: bool = Fal
             report += f"\n\n（注：LLM 生成失败，使用模板兜底。错误：{e}）"
         return report
 
-    # 1. 扩大检索范围（从 10 → 20 篇）
     docs = hybrid_retriever.hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
     if not docs:
         return "检索失败，请刷新页面重试。"
 
-    # 2. CrossEncoder 过滤
     scores = reranker.rerank(query, docs)
     relevant = [doc for doc, s in zip(docs, scores) if s >= RERANKER_THRESHOLD]
 
     if len(relevant) >= MIN_NOTES:
-        # ✅ 有足够数据（≥20 篇），正常走管道
         return _do_insight(relevant, query)
 
-    # ❌ 数据不足（< 20 篇）→ 🔥 触发真实爬虫从小红书抓取
     current_count = len(relevant)
     fetch_target = max(MIN_NOTES - current_count + 5, 30)
 
@@ -259,35 +126,28 @@ def run_insight_pipeline(query: str, status_placeholder=None, stream: bool = Fal
     if status_placeholder:
         status_placeholder.success(f"✅ 已从小红书抓取 {count} 篇「{query}」真实笔记，正在入库并分析...")
 
-    # 增量入库 + 重建索引
-    reload_after_fetch()
+    # ✅ Day 4: 委托给 AppState 统一重建
+    state.rebuild_sync()
+    st.session_state.data_version += 1
 
-    # 用更新后的 retriever 重新查询
-    import time
-    time.sleep(0.5)  # 等 chromadb 落盘
-    fresh_docs = st.session_state.runtime["hybrid_retriever"].hybrid_search(
-        query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES
-    )
+    time.sleep(0.5)
+    fresh_docs = state.hybrid_retriever.hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
     fresh_scores = reranker.rerank(query, fresh_docs)
     fresh_relevant = [doc for doc, s in zip(fresh_docs, fresh_scores) if s >= RERANKER_THRESHOLD]
 
     if not fresh_relevant:
         return f"已从小红书抓取 {count} 篇「{query}」笔记，但检索仍未匹配。请稍后重试或更换关键词。"
 
-    # 用新数据生成洞察
     report = _do_insight(fresh_relevant, query)
-    report = (
-        f"（📥 已从小红书实时抓取「{query}」{count} 篇真实笔记，"
-        f"当前共 {len(fresh_relevant)} 篇相关笔记）\n\n{report}"
-    )
+    report = (f"（📥 已从小红书实时抓取「{query}」{count} 篇真实笔记，"
+              f"当前共 {len(fresh_relevant)} 篇相关笔记）\n\n{report}")
     return report
 
 
 # ======================================================================
-# 第四部分：Streamlit UI
+# 第三部分：Streamlit UI
 # ======================================================================
 
-# ---- 侧边栏 ----
 with st.sidebar:
     st.subheader("模式选择")
     mode = st.radio(
@@ -334,7 +194,6 @@ with st.sidebar:
 
 # ---- 主界面 ----
 if mode == "问答模式":
-    # ========== 问答模式 ==========
     st.subheader("💬 问答")
 
     if "qa_messages" not in st.session_state:
@@ -363,11 +222,10 @@ if mode == "问答模式":
                 })
                 response = result["generation"]
 
-                # 🚀 如果没有答案 → 自动从小红书抓取真实数据 → 重新检索回答
                 if "无法回答" in response or "根据现有资料" in response:
                     from src.crawler import CrawlerInterface
 
-                    category = prompt  # 直接用问题作为品类名
+                    category = prompt
                     status.info(f"🔍 知识库中暂无「{category}」相关信息，正在从小红书实时抓取...")
 
                     cookies_json = ""
@@ -385,14 +243,14 @@ if mode == "问答模式":
 
                         if count > 0:
                             status.success(f"✅ 已从小红书抓取 {count} 篇「{category}」真实笔记，正在重新检索回答...")
-                            reload_after_fetch()
+                            # ✅ Day 4: 委托给 AppState 统一重建
+                            state.rebuild_sync()
+                            st.session_state.data_version += 1
 
-                            import time
                             time.sleep(0.5)
 
-                            # 使用更新后的 graph 重新问答
-                            fresh_graph = st.session_state.runtime["graph"]
-                            result = fresh_graph.invoke({
+                            graph = state.graph
+                            result = graph.invoke({
                                 "question": prompt,
                                 "rewritten_question": "",
                                 "strategy": strategy if strategy != "auto" else "",
@@ -404,14 +262,10 @@ if mode == "问答模式":
                             response = result["generation"]
 
                             if "无法回答" in response or "根据现有资料" in response:
-                                response = (
-                                    f"（📥 已从小红书抓取 {count} 篇真实笔记，"
-                                    f"但检索仍未匹配到相关信息）\n\n{response}"
-                                )
+                                response = (f"（📥 已从小红书抓取 {count} 篇真实笔记，"
+                                            f"但检索仍未匹配到相关信息）\n\n{response}")
                             else:
-                                response = (
-                                    f"（📥 已从小红书实时抓取 {count} 篇真实笔记作为知识补充）\n\n{response}"
-                                )
+                                response = (f"（📥 已从小红书实时抓取 {count} 篇真实笔记作为知识补充）\n\n{response}")
                         else:
                             response = f"抱歉，无法从小红书获取「{category}」的数据。请检查网络连接后重试。"
 
@@ -420,7 +274,6 @@ if mode == "问答模式":
         st.session_state.qa_messages.append({"role": "assistant", "content": response})
 
 else:
-    # ========== 洞察模式 ==========
     st.subheader("📊 选品洞察")
 
     if "insight_messages" not in st.session_state:
@@ -440,7 +293,6 @@ else:
             report_container = st.empty()
             with st.spinner("分析评论区数据中..."):
                 stream_gen = run_insight_pipeline(prompt, status_placeholder=status, stream=True)
-                # 流式输出
                 full_report = ""
                 for chunk in stream_gen:
                     full_report += chunk
@@ -450,6 +302,5 @@ else:
         st.session_state.insight_messages.append({"role": "assistant", "content": full_report})
 
 
-# ---- 底部 ----
 st.markdown("---")
-st.caption(f"🎯 小红书爆款雷达 v0.3 · 问答 + 洞察 + 自动抓取 · 数据版本 {st.session_state.data_version}")
+st.caption(f"🎯 小红书爆款雷达 v0.4 · 问答 + 洞察 + 自动抓取 · 数据版本 {st.session_state.data_version}")
