@@ -5,7 +5,7 @@
 name: supervisor
 version: "1.0.0"
 description: "分析问题特征，选择最佳检索策略"
-model: deepseek-ai/DeepSeek-V4-Flash
+model: deepseek-ai/DeepSeek-V3
 temperature: 0
 
 system: |

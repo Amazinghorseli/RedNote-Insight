@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # ===== LLM 配置 =====
     llm_model: str = Field(
-        default="deepseek-ai/DeepSeek-V4-Flash",
+        default="deepseek-ai/DeepSeek-V3",
         description="LLM 模型名（OpenAI 兼容格式）",
     )
     llm_temperature: float = Field(

@@ -6,7 +6,7 @@
 name: gen_answer
 version: "1.0.0"
 description: "基于检索上下文生成中文回答"
-model: deepseek-ai/DeepSeek-V4-Flash
+model: deepseek-ai/DeepSeek-V3
 temperature: 0
 
 system: |

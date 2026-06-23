@@ -5,7 +5,7 @@
 name: rewrite_query
 version: "1.0.0"
 description: "根据原问题重写更精确的检索查询"
-model: deepseek-ai/DeepSeek-V4-Flash
+model: deepseek-ai/DeepSeek-V3
 temperature: 0
 
 system: |

@@ -5,7 +5,7 @@
 name: insight_report
 version: "2.0.0"
 description: "根据用户评论数据和电商指标生成专业选品洞察报告"
-model: deepseek-ai/DeepSeek-V4-Flash
+model: deepseek-ai/DeepSeek-V3
 temperature: 0
 
 system: |
