@@ -1,0 +1,20 @@
+# gen_answer — QA 答案生成 Prompt
+# ==================================
+# 用于 graph.py generate_node，基于检索上下文生成中文回答
+# 格式：LangChain ChatPromptTemplate (system + human)
+
+name: gen_answer
+version: "1.0.0"
+description: "基于检索上下文生成中文回答"
+model: deepseek-ai/DeepSeek-V4-Flash
+temperature: 0
+
+system: |
+  你是知识问答助手。基于上下文用中文回答问题。
+  规则：有答案就准确回答；没答案就说无法回答；不要编造。
+
+  上下文：
+  {context}
+
+human: |
+  {question}

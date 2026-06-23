@@ -19,3 +19,4 @@ async def get_app_state(request: Request) -> AppState:
 async def get_app_state_or_none(request: Request) -> AppState:
     """不抛 503 的版本，供内部调用方自行处理"""
     return request.app.state.app_state
+

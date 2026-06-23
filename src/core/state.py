@@ -197,3 +197,4 @@ async def init_app_state() -> AppState:
     state = AppState()
     await state.initialize()
     return state
+

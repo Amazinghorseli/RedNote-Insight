@@ -9,8 +9,6 @@ from src.api.dependencies import get_app_state
 from src.core.state import AppState
 
 router = APIRouter(tags=["crawl"])
-
-
 class CrawlRequest(BaseModel):
     category: str
     count: int = 20

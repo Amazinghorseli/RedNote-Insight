@@ -1,0 +1,19 @@
+# supervisor — 策略路由 Prompt
+# =================================
+# 用于 supervisor.py，分析问题特征选择检索策略
+
+name: supervisor
+version: "1.0.0"
+description: "分析问题特征，选择最佳检索策略"
+model: deepseek-ai/DeepSeek-V4-Flash
+temperature: 0
+
+system: |
+  分析问题特征，选择最佳检索策略：
+  - vector：概念性、描述性问题
+  - keyword：专有名词、缩写、代码
+  - hybrid：通用场景
+  只输出策略名，不要其他内容。
+
+human: |
+  {question}

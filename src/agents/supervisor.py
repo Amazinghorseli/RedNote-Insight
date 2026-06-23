@@ -8,6 +8,7 @@ from langchain_openai import ChatOpenAI
 
 from src.config import LLM_CONFIG
 from src.logger import logger
+from src.core.prompt_loader import get_prompt_loader
 
 
 class Supervisor:
@@ -15,18 +16,16 @@ class Supervisor:
 
     def __init__(self, llm=None):
         self.llm = llm or ChatOpenAI(**LLM_CONFIG)
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", "分析问题特征，选择最佳检索策略：\n"
-             "- vector：概念性、描述性问题\n"
-             "- keyword：专有名词、缩写、代码\n"
-             "- hybrid：通用场景\n"
-             "只输出策略名，不要其他内容。"),
-            ("human", "{question}"),
-        ])
+        self.prompt_loader = get_prompt_loader()
+
+    def _get_prompt(self):
+        """获取 Supervisor prompt（从 YAML 加载）"""
+        return self.prompt_loader.load("supervisor", "v1")
 
     def decide(self, question: str, available_strategies: list[str]) -> str:
         """返回选中的策略名（同步版本）"""
-        msg = self.prompt.format_messages(question=question)
+        prompt = self._get_prompt()
+        msg = prompt.format_messages(question=question)
         strategy = self.llm.invoke(msg).content.strip().lower()
         if strategy not in available_strategies:
             strategy = "hybrid"
@@ -35,7 +34,8 @@ class Supervisor:
 
     async def adecide(self, question: str, available_strategies: list[str]) -> str:
         """返回选中的策略名（异步版本）"""
-        msg = self.prompt.format_messages(question=question)
+        prompt = self._get_prompt()
+        msg = prompt.format_messages(question=question)
         response = await self.llm.ainvoke(msg)
         strategy = response.content.strip().lower()
         if strategy not in available_strategies:

@@ -3,6 +3,7 @@ graph.py — LangGraph 图编排（全异步）
 ======================================
 将 supervisor + agents 组合为可执行的 LangGraph 应用。
 所有节点均为 async，由 build_async_graph 构建。
+Prompt 从 YAML 加载（src/prompts/）。
 
 用法:
     graph = build_async_graph(vectorstore, bm25_search, hybrid_retriever, reranker)
@@ -18,6 +19,7 @@ from langchain_openai import ChatOpenAI
 from src.config import LLM_CONFIG, RETRY_LIMIT, RERANKER_THRESHOLD
 from src.retrievers import APIReranker
 from src.logger import logger
+from src.core.prompt_loader import get_prompt_loader
 
 
 # ===== State =====
@@ -33,15 +35,7 @@ class AgentState(TypedDict):
 
 # ===== 初始化 =====
 llm = ChatOpenAI(**LLM_CONFIG)
-
-
-# ===== 生成 Prompt =====
-gen_prompt = ChatPromptTemplate.from_messages([
-    ("system", "你是知识问答助手。基于上下文用中文回答问题。\n"
-     "规则：有答案就准确回答；没答案就说无法回答；不要编造。\n\n"
-     "上下文：\n{context}"),
-    ("human", "{question}"),
-])
+prompt_loader = get_prompt_loader()
 
 
 # ===== 图节点工厂（异步） =====
@@ -114,12 +108,8 @@ def create_rerank_node(reranker: APIReranker):
 
 async def rewrite_node(state: AgentState) -> dict:
     """重写查询，提高检索质量（异步）"""
-    rewrite_prompt = ChatPromptTemplate.from_messages([
-        ("system", "你是查询重写专家。根据原问题重写更精确的检索查询。"
-         "只输出重写后的查询，不要解释。"),
-        ("human", "原问题：{question}"),
-    ])
     logger.info("优化查询重写...")
+    rewrite_prompt = prompt_loader.load("rewrite_query", "v1")
     msg = rewrite_prompt.format_messages(question=state["question"])
     response = await llm.ainvoke(msg)
     rewritten = response.content.strip()
@@ -135,6 +125,7 @@ async def generate_node(state: AgentState) -> dict:
     context = "\n---\n".join(
         f"[文档{i+1}] {d.page_content}" for i, d in enumerate(docs)
     )
+    gen_prompt = prompt_loader.load("gen_answer", "v1")
     msg = gen_prompt.format_messages(context=context, question=state["question"])
     response = await llm.ainvoke(msg)
     return {"generation": response.content}

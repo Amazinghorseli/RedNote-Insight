@@ -125,15 +125,93 @@
         if (!category) return;
 
         setLoading(insightBtn, true);
-        insightResult.innerHTML = '<div class="empty-state"><div class="spinner" style="border-color:#ccc;border-top-color:#ff5a5f;width:32px;height:32px;"></div><p style="margin-top:12px;">正在分析「<strong>' + escapeHtml(category) + '</strong>」的评论区数据...</p></div>';
+
+        // 创建报告容器
+        insightResult.innerHTML = '<div class="insight-report">';
+        const reportEl = insightResult.querySelector('.insight-report');
+
+        // 状态指示器
+        const statusEl = document.createElement('div');
+        statusEl.className = 'stream-status';
+        statusEl.innerHTML = '<div class="spinner" style="border-color:#ccc;border-top-color:#ff5a5f;width:24px;height:24px;"></div> <span class="status-text">正在分析「<strong>' + escapeHtml(category) + '</strong>」...</span>';
+        reportEl.appendChild(statusEl);
+
+        // 报告内容区
+        const contentEl = document.createElement('pre');
+        contentEl.style.cssText = 'white-space:pre-wrap;font-family:inherit;line-height:1.8;display:none;';
+        reportEl.appendChild(contentEl);
+
+        // 底部统计
+        const footerEl = document.createElement('p');
+        footerEl.style.cssText = 'margin-top:12px;color:#999;font-size:12px;display:none;';
+        reportEl.appendChild(footerEl);
 
         try {
-            const data = await apiPost('/api/insight', { category });
-            insightResult.innerHTML = renderInsightReport(data);
-            loadStats();  // 可能有新数据入库
-            showToast(`✅ 报告生成完成 · 耗时 ${data.elapsed}s`);
+            const resp = await fetch('/api/insight/stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category }),
+            });
+
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
+            }
+
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let fullText = '';
+            let noteCount = 0;
+            let elapsed = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                let eventType = '';
+                for (const line of lines) {
+                    if (line.startsWith('event: ')) {
+                        eventType = line.slice(7).trim();
+                    } else if (line.startsWith('data: ')) {
+                        const data = JSON.parse(line.slice(6));
+
+                        if (eventType === 'stage') {
+                            statusEl.querySelector('.status-text').textContent = data.message;
+                        } else if (eventType === 'token') {
+                            if (!contentEl.style.display || contentEl.style.display === 'none') {
+                                contentEl.style.display = 'block';
+                                statusEl.style.display = 'none';
+                            }
+                            fullText += data.token;
+                            contentEl.textContent = fullText;
+                        } else if (eventType === 'done') {
+                            noteCount = data.note_count;
+                            elapsed = data.elapsed;
+                        } else if (eventType === 'error') {
+                            throw new Error(data.message);
+                        }
+                    }
+                }
+            }
+
+            if (fullText) {
+                footerEl.textContent = '⏱ 耗时 ' + elapsed + 's · 基于 ' + noteCount + ' 篇笔记';
+                footerEl.style.display = 'block';
+                showToast('✅ 报告生成完成 · 耗时 ' + elapsed + 's');
+            } else {
+                contentEl.textContent = '未能生成报告内容';
+                contentEl.style.display = 'block';
+            }
+
+            loadStats();
+
         } catch (e) {
-            insightResult.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>${escapeHtml(e.message)}</p></div>`;
+            insightResult.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><p>' + escapeHtml(e.message) + '</p></div>';
             showToast('❌ ' + e.message);
         } finally {
             setLoading(insightBtn, false);
@@ -179,15 +257,85 @@
         qaInput.value = '';
         qaBtn.disabled = true;
 
-        const msgId = addChatMessage('assistant', '<div class="spinner" style="border-color:#ccc;border-top-color:#ff5a5f;"></div> 思考中...');
+        const statusEl = addChatMessage('assistant', '<div class="spinner" style="border-color:#ccc;border-top-color:#ff5a5f;"></div> 思考中...');
+        const answerEl = document.createElement('div');
+        answerEl.className = 'chat-bubble assistant stream-answer';
+        answerEl.style.display = 'none';
+        chatMessages.appendChild(answerEl);
+
+        let fullAnswer = '';
 
         try {
-            const data = await apiPost('/api/qa', { question });
-            updateChatMessage(msgId, data.answer);
-            showToast(`✅ 回答完成 · 耗时 ${data.elapsed}s`);
+            const resp = await fetch('/api/qa/stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question }),
+            });
+
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
+            }
+
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                let eventType = '';
+                for (const line of lines) {
+                    if (line.startsWith('event: ')) {
+                        eventType = line.slice(7).trim();
+                    } else if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+
+                            if (eventType === 'stage') {
+                                statusEl.innerHTML = '<div class="spinner" style="border-color:#ccc;border-top-color:#ff5a5f;"></div> ' + escapeHtml(data.message);
+                            } else if (eventType === 'token') {
+                                if (statusEl.style.display !== 'none') {
+                                    statusEl.style.display = 'none';
+                                    answerEl.style.display = 'block';
+                                }
+                                fullAnswer += data.token;
+                                answerEl.textContent = fullAnswer;
+                                chatMessages.parentElement.scrollTop = chatMessages.parentElement.scrollHeight;
+                            } else if (eventType === 'done') {
+                                answerEl.textContent = data.answer || fullAnswer;
+                                showToast('✅ 回答完成 · 耗时 ' + data.elapsed + 's');
+                            } else if (eventType === 'error') {
+                                throw new Error(data.message);
+                            }
+                        } catch (parseErr) {
+                            // 非 JSON 数据，跳过
+                        }
+                    }
+                }
+            }
+
+            if (!fullAnswer) {
+                answerEl.textContent = '未能生成回答';
+                answerEl.style.display = 'block';
+            }
+
+            if (statusEl.style.display !== 'none') {
+                statusEl.style.display = 'none';
+            }
+
         } catch (e) {
-            updateChatMessage(msgId, '❌ ' + escapeHtml(e.message));
+            if (statusEl.style.display !== 'none') statusEl.style.display = 'none';
+            answerEl.textContent = '❌ ' + escapeHtml(e.message);
+            answerEl.style.display = 'block';
             showToast('❌ ' + e.message);
+        } finally {
+            qaBtn.disabled = false;
         }
     });
 

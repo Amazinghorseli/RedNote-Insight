@@ -6,6 +6,7 @@ insight_agent.py - 选品洞察智能体
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from src.config import LLM_CONFIG
+from src.core.prompt_loader import get_prompt_loader
 
 
 class InsightGenerator:
@@ -13,65 +14,11 @@ class InsightGenerator:
 
     def __init__(self, llm=None):
         self.llm = llm or ChatOpenAI(**LLM_CONFIG)
-        self._build_prompts()
+        self.prompt_loader = get_prompt_loader()
 
-    def _build_prompts(self):
-        """构建电商选品洞察报告 prompt（v2 升级版）"""
-        self.report_prompt = ChatPromptTemplate.from_messages([
-            (
-                "system",
-                "你是小红书电商选品分析专家，同时也是有5年经验的电商小商家。"
-                "根据用户提供的评论区数据和电商指标，生成一份专业的**电商选品市场洞察报告**。\n\n"
-                "报告要求：\n"
-                "1. 以电商小商家的视角来分析，关注**可执行性**和**利润**\n"
-                "2. 每条洞察都要有数据支撑（频次、利润率、评分等）\n"
-                "3. 选品建议要具体：价格带 + 功能点 + 目标人群 + 预估利润\n"
-                "4. 指出竞争空白（用户想要但没有被满足的）和差异化机会\n"
-                "5. 评估物流友好度和售后风险\n"
-                "6. 数据量充足，尽量覆盖更多用户反馈\n\n"
-                "报告格式（严格按以下结构输出）：\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "【市场概况】品类热度、分析笔记数、季节特性（常青/季节性）\n"
-                "【利润空间评估】平均售价/成本、定价倍率、预估利润率、是否达到3-5倍选品标准\n"
-                "【物流友好度】平均重量、破损风险、运费预估、仓储难度\n"
-                "【竞争格局】主要品牌、品牌集中度、新卖家进入难度\n"
-                "【用户痛点 TOP 5】列出最集中的投诉问题（至少5条，覆盖面要广）\n"
-                "【需求信号】用户正在搜索/求购的方向（至少5条）\n"
-                "【差异化机会】基于差评的升级方向：材质/功能/组合/场景/颜色等\n"
-                "【选品综合评分】利润/物流/竞争/需求四维雷达评分 + 总分\n"
-                "【选品建议】4-5条具体可执行方向，含价格带+功能点+目标人群+预估利润\n"
-                "【避坑提醒】该品类的潜在风险（退货率、售后、侵权、季节性等）\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "最后加一句总结性的一句话点评。"
-            ),
-            (
-                "human",
-                "品类：{category}\n\n"
-                "===== 数据概览 =====\n"
-                "分析笔记数：{note_count} 篇\n"
-                "平均点赞：{avg_likes} | 总求链接：{total_ask_link}\n"
-                "常青款占比：{evergreen_ratio}%\n\n"
-                "===== 电商指标 =====\n"
-                "平均售价：¥{avg_price} | 平均成本：¥{avg_cost}\n"
-                "定价倍率(售价/成本)：{price_cost_ratio}x\n"
-                "平均利润率：{profit_margin}%\n"
-                "平均重量：{avg_weight}kg\n\n"
-                "===== 选品评分 =====\n"
-                "利润评分：{profit_score}/100\n"
-                "物流评分：{logistics_score}/100\n"
-                "竞争评分：{competition_score}/100\n"
-                "需求热度：{demand_score}/100\n"
-                "选品综合评分：{selection_score}/100\n\n"
-                "===== 用户反馈 =====\n"
-                "用户投诉（按频次排序）：\n{complaints}\n\n"
-                "用户需求信号（按频次排序）：\n{intents}\n\n"
-                "品牌对比提及：\n{comparisons}\n\n"
-                "涉及品牌：{brands}\n\n"
-                "差异化方向参考：{differentiations}\n"
-                "预估月销量参考：{monthly_sales} 件\n\n"
-                "请输出电商选品洞察报告：",
-            ),
-        ])
+    def _get_prompt(self):
+        """获取报告 Prompt（从 YAML 加载，v2）"""
+        return self.prompt_loader.load("insight_report", "v2")
 
     def generate(self, aggregated: dict, category: str = "") -> str:
         """
@@ -100,7 +47,7 @@ class InsightGenerator:
 
         differentiations_str = ", ".join(aggregated.get("differentiation_directions", [])) or "暂无"
 
-        msg = self.report_prompt.format_messages(
+        msg = self._get_prompt().format_messages(
             category=category or "未分类",
             note_count=aggregated["note_count"],
             avg_likes=aggregated["avg_likes"],
@@ -149,7 +96,7 @@ class InsightGenerator:
         brands_str = ", ".join(aggregated["related_brands"]) or "暂无"
         differentiations_str = ", ".join(aggregated.get("differentiation_directions", [])) or "暂无"
 
-        msg = self.report_prompt.format_messages(
+        msg = self._get_prompt().format_messages(
             category=category or "未分类",
             note_count=aggregated["note_count"],
             avg_likes=aggregated["avg_likes"],
@@ -176,6 +123,62 @@ class InsightGenerator:
         response = await self.llm.ainvoke(msg)
         return response.content.strip()
 
+    async def astream(self, aggregated: dict, category: str = ""):
+        """异步流式版本：逐 token 生成洞察报告。
+        用法：
+            async for chunk in generator.astream(data, category):
+                print(chunk, end="")
+        """
+        if aggregated["note_count"] == 0:
+            yield "没有足够的评论数据生成洞察报告。"
+            return
+
+        # 格式化评论数据（复用 generate 的逻辑）
+        complaints_str = "\n".join(
+            f"  {i+1}. 「{c}」出现 {f} 次"
+            for i, (c, f) in enumerate(aggregated["top_complaints"][:10])
+        ) or "  暂无"
+
+        intents_str = "\n".join(
+            f"  {i+1}. 「{t}」出现 {f} 次"
+            for i, (t, f) in enumerate(aggregated["top_purchase_intents"][:10])
+        ) or "  暂无"
+
+        comparisons_str = "\n".join(
+            f"  - {c}" for c in aggregated["comparison_patterns"][:10]
+        ) or "  暂无"
+
+        brands_str = ", ".join(aggregated["related_brands"]) or "暂无"
+        differentiations_str = ", ".join(aggregated.get("differentiation_directions", [])) or "暂无"
+
+        msg = self._get_prompt().format_messages(
+            category=category or "未分类",
+            note_count=aggregated["note_count"],
+            avg_likes=aggregated["avg_likes"],
+            total_ask_link=aggregated["total_ask_link"],
+            evergreen_ratio=int(aggregated.get("evergreen_ratio", 0.8) * 100),
+            avg_price=aggregated.get("avg_price", 0),
+            avg_cost=aggregated.get("avg_cost", 0),
+            price_cost_ratio=aggregated.get("price_cost_ratio", 3),
+            profit_margin=int(aggregated.get("avg_profit_margin", 0.6) * 100),
+            avg_weight=aggregated.get("avg_weight", 0.3),
+            profit_score=aggregated.get("profit_score", 0),
+            logistics_score=aggregated.get("logistics_score", 0),
+            competition_score=aggregated.get("competition_score", 0),
+            demand_score=aggregated.get("demand_score", 0),
+            selection_score=aggregated.get("selection_score", 0),
+            complaints=complaints_str,
+            intents=intents_str,
+            comparisons=comparisons_str,
+            brands=brands_str,
+            differentiations=differentiations_str,
+            monthly_sales=aggregated.get("estimated_monthly_sales", 0),
+        )
+
+        async for chunk in self.llm.astream(msg):
+            if chunk.content:
+                yield chunk.content
+
     def generate_stream(self, aggregated: dict, category: str = "") -> str:
         """
         流式版本：逐 token 生成洞察报告。
@@ -199,7 +202,7 @@ class InsightGenerator:
             for i, (t, f) in enumerate(aggregated["top_purchase_intents"][:10])
         ) or "  暂无"
 
-        msg = self.report_prompt.format_messages(
+        msg = self._get_prompt().format_messages(
             category=category or "未分类",
             note_count=aggregated["note_count"],
             avg_likes=aggregated["avg_likes"],

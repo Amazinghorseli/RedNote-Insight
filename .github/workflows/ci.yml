@@ -1,0 +1,133 @@
+# =============================================================================
+# RedNote Insight — CI Pipeline
+# =============================================================================
+# 触发条件：push 到 main 或 PR 到 main
+# 自动运行：lint → test → build
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, master, refactor/production]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  UV_VERSION: "0.6.x"
+
+jobs:
+  # ===== 1. Lint（代码风格检查）=====
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev
+
+      - name: Install dev dependencies
+        run: uv sync --frozen
+
+      - name: Run ruff check
+        run: uv run ruff check src/ tests/
+
+      - name: Run ruff format check
+        run: uv run ruff format --check src/ tests/
+
+  # ===== 2. Test（单元测试 + 集成测试）=====
+  test:
+    name: Test (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+    services:
+      # PostgreSQL + pgvector（用于向量检索测试）
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rednote_insight_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Generate demo data
+        run: |
+          # 创建 .env 用于 generate_data.py
+          echo "OPENAI_API_KEY=ci-test-key" > .env
+          echo "OPENAI_BASE_URL=https://api.siliconflow.cn/v1" >> .env
+          uv run python generate_data.py
+        continue-on-error: true
+
+      - name: Run tests
+        run: |
+          uv run pytest tests/ \
+            -v \
+            --tb=short \
+            --timeout=60 \
+            -p no:warnings
+        env:
+          OPENAI_API_KEY: ci-test-key
+          OPENAI_BASE_URL: https://api.siliconflow.cn/v1
+
+  # ===== 3. Build（Docker 镜像构建验证）=====
+  build:
+    name: Build (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: rednote-insight:ci-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify image
+        run: |
+          docker images rednote-insight:ci-test
+          echo "✅ Docker 镜像构建成功"
