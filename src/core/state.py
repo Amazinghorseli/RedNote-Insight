@@ -5,6 +5,7 @@ state.py — 生产级 AppState 容器
 - asyncio.Lock 保证线程安全
 - lifespan 中冷启动初始化
 - 增量重建索引
+- 自动切换 ChromaDB / PostgreSQL+pgvector
 
 用法:
     from src.core.state import AppState, init_app_state
@@ -18,6 +19,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Optional, Callable
 
+from src.config import settings
 from src.logger import logger
 
 
@@ -45,6 +47,7 @@ class AppState:
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _initialized: bool = False
     _error: Optional[str] = None
+    _use_pg: bool = False  # True=PG+pgvector, False=ChromaDB
 
     # --- 统计 ---
     stats: dict = field(default_factory=lambda: {
@@ -80,20 +83,30 @@ class AppState:
         """增量入库 + 重建 BM25/Hybrid/Graph 索引"""
         async with self._lock:
             from src.ingestion import incremental_ingest, rebuild_all_chunks
-            from src.retrievers import HybridRetriever
+            from src.retrievers import HybridRetriever, PgHybridRetriever
             from src.graph import build_async_graph
             from rank_bm25 import BM25Okapi
             import jieba
 
             logger.info("[AppState] 重建全量索引...")
 
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, incremental_ingest, self.raw_dir, self.vectorstore)
+            if self._use_pg:
+                # PG 增量入库
+                from src.ingestion import incremental_ingest_to_pg
+                await incremental_ingest_to_pg(self.raw_dir)
+            else:
+                # ChromaDB 增量入库
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, incremental_ingest, self.raw_dir, self.vectorstore)
 
             chunks = rebuild_all_chunks(self.raw_dir)
             tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
             bm25 = BM25Okapi(tokenized)
-            hr = HybridRetriever(self.vectorstore, chunks)
+
+            if self._use_pg:
+                hr = PgHybridRetriever(self.vectorstore, chunks)
+            else:
+                hr = HybridRetriever(self.vectorstore, chunks)
 
             def bms(q, k=3):
                 scores = bm25.get_scores(list(jieba.cut(q)))
@@ -105,12 +118,12 @@ class AppState:
             self.bm25_search = bms
             self.graph = build_async_graph(self.vectorstore, bms, hr, reranker=self.reranker)
             self._refresh_stats()
-            logger.info(f"[AppState] 索引重建完成 — {len(chunks)} chunks")
+            logger.info(f"[AppState] 索引重建完成 — {len(chunks)} chunks (pg={self._use_pg})")
 
     async def _do_initialize(self) -> None:
-        """实际初始化逻辑"""
+        """实际初始化逻辑：优先 PG，回退 ChromaDB"""
         from src.ingestion import rebuild_all_chunks, load_vectorstore
-        from src.retrievers import HybridRetriever, APIReranker
+        from src.retrievers import HybridRetriever, APIReranker, create_pg_vectorstore, PgHybridRetriever
         from src.graph import build_async_graph
         from rank_bm25 import BM25Okapi
         import jieba
@@ -118,7 +131,6 @@ class AppState:
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.raw_dir = os.path.join(project_root, "data", "raw")
         self.chroma_dir = os.path.join(project_root, "data", "chroma_db")
-        chroma_db_file = os.path.join(self.chroma_dir, "chroma.sqlite3")
 
         loop = asyncio.get_running_loop()
 
@@ -128,20 +140,54 @@ class AppState:
             self._error = "暂无数据，请用 generate_data.py 生成数据后刷新"
             return
 
-        if os.path.exists(chroma_db_file):
-            vectorstore = await loop.run_in_executor(None, load_vectorstore)
-        else:
-            from src.ingestion import load_raw_documents, chunk_documents, build_vectorstore
-            docs = load_raw_documents()
-            chunks = chunk_documents(docs)
-            vectorstore = await loop.run_in_executor(None, lambda: build_vectorstore(chunks))
-
         self.reranker = APIReranker()
         chunks = rebuild_all_chunks(self.raw_dir)
 
+        # ===== 优先尝试 PostgreSQL + pgvector =====
+        vectorstore = None
+        if settings.database_url:
+            logger.info("trying_pg_vectorstore...")
+            try:
+                pg_store = await create_pg_vectorstore()
+                if pg_store is not None:
+                    vectorstore = pg_store  # PGVectorStore
+                    self._use_pg = True
+                    logger.info("using_pg_vectorstore")
+                else:
+                    # PG 可用但为空，写入数据
+                    logger.info("pg_empty, ingesting...")
+                    from src.ingestion import ingest_to_pg
+                    await ingest_to_pg(self.raw_dir)
+                    pg_store = await create_pg_vectorstore()
+                    if pg_store:
+                        vectorstore = pg_store
+                        self._use_pg = True
+                        logger.info("pg_ingested_and_ready")
+            except Exception as e:
+                logger.warning(f"pg_init_failed: {e}, falling back to ChromaDB")
+                self._use_pg = False
+
+        # ===== 回退 ChromaDB =====
+        if vectorstore is None:
+            self._use_pg = False
+            chroma_db_file = os.path.join(self.chroma_dir, "chroma.sqlite3")
+            if os.path.exists(chroma_db_file):
+                vectorstore = await loop.run_in_executor(None, load_vectorstore)
+            else:
+                from src.ingestion import load_raw_documents, chunk_documents, build_vectorstore
+                docs = load_raw_documents()
+                chunks_for_build = chunk_documents(docs)
+                vectorstore = await loop.run_in_executor(None, lambda: build_vectorstore(chunks_for_build))
+            logger.info("using_chromadb_vectorstore")
+
+        # ===== 构建 BM25 + Hybrid + Graph =====
         tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
         bm25 = BM25Okapi(tokenized)
-        hr = HybridRetriever(vectorstore, chunks)
+
+        if self._use_pg:
+            hr = PgHybridRetriever(vectorstore, chunks)  # PG 版
+        else:
+            hr = HybridRetriever(vectorstore, chunks)     # ChromaDB 版
 
         def bm25_search(query: str, k: int = 3):
             tokenized_query = list(jieba.cut(query))

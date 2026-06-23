@@ -53,9 +53,17 @@ def create_retrieve_node(vectorstore, bm25_retriever, hybrid_retriever):
         if strategy == "hybrid":
             docs = await hybrid_retriever.ahybrid_search(query)
         elif strategy == "vector":
-            docs = await loop.run_in_executor(
-                None, lambda: vectorstore.similarity_search(query, k=K)
-            )
+            # 兼容 PG (async) 和 ChromaDB (sync) 向量存储
+            if hasattr(vectorstore, 'similarity_search'):
+                import inspect
+                if inspect.iscoroutinefunction(vectorstore.similarity_search):
+                    docs = await vectorstore.similarity_search(query, k=K)
+                else:
+                    docs = await loop.run_in_executor(
+                        None, lambda: vectorstore.similarity_search(query, k=K)
+                    )
+            else:
+                docs = []
         else:
             docs = await loop.run_in_executor(
                 None, lambda: bm25_retriever(query, k=K)
