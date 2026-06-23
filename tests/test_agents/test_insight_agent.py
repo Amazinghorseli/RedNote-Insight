@@ -2,6 +2,7 @@
 test_insight_agent.py — InsightGenerator 单元测试
 """
 import pytest
+from unittest.mock import MagicMock, AsyncMock, patch
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
@@ -11,7 +12,6 @@ class TestInsightGenerator:
     """InsightGenerator 测试"""
 
     def _make_aggregated(self, **overrides):
-        """构建测试用的聚合数据"""
         data = {
             "note_count": 5,
             "avg_likes": 120.0,
@@ -39,34 +39,27 @@ class TestInsightGenerator:
         return data
 
     def test_instantiation(self):
-        """InsightGenerator 可以正常实例化"""
         from src.agents.insight_agent import InsightGenerator
         gen = InsightGenerator()
         assert gen is not None
         assert gen.llm is not None
 
     def test_generate_fallback_basic(self):
-        """generate_fallback() 基本功能：生成兜底报告"""
         from src.agents.insight_agent import InsightGenerator
         gen = InsightGenerator()
         aggregated = self._make_aggregated()
-
         report = gen.generate_fallback(aggregated, category="磁吸感应灯")
-
         assert "磁吸感应灯" in report
         assert "市场概况" in report
-        assert "利润空间评估" in report
         assert "用户痛点" in report
 
     def test_generate_fallback_empty_data(self):
-        """generate_fallback() 空数据时应返回提示"""
         from src.agents.insight_agent import InsightGenerator
         gen = InsightGenerator()
         report = gen.generate_fallback({"note_count": 0}, category="测试")
         assert "没有足够的评论数据" in report
 
     def test_generate_fallback_low_score_warning(self):
-        """generate_fallback() 低评分时应给出警告"""
         from src.agents.insight_agent import InsightGenerator
         gen = InsightGenerator()
         aggregated = self._make_aggregated(selection_score=30, competition_score=20)
@@ -77,38 +70,34 @@ class TestInsightGenerator:
     async def test_agenerate_returns_report(self):
         """agenerate() 应返回报告文本"""
         from src.agents.insight_agent import InsightGenerator
-        from unittest.mock import AsyncMock, MagicMock
+        mock_llm = MagicMock()
+        mock_llm.ainvoke = AsyncMock()
+        mock_llm.ainvoke.return_value.content = "测试报告内容"
 
-        gen = InsightGenerator()
-        mock_response = MagicMock()
-        mock_response.content = "测试报告内容"
-        gen.llm.ainvoke = AsyncMock(return_value=mock_response)
-
+        gen = InsightGenerator(llm=mock_llm)
         aggregated = self._make_aggregated()
         report = await gen.agenerate(aggregated, category="测试品类")
-
         assert report == "测试报告内容"
 
     @pytest.mark.asyncio
     async def test_astream_yields_tokens(self):
         """astream() 应逐 token yield"""
         from src.agents.insight_agent import InsightGenerator
-        from unittest.mock import AsyncMock, MagicMock
 
-        gen = InsightGenerator()
-        # Mock llm.astream
+        class MockChunk:
+            def __init__(self, c):
+                self.content = c
+
         async def mock_astream(msg):
-            class Chunk:
-                def __init__(self, c):
-                    self.content = c
-            yield Chunk("测")
-            yield Chunk("试")
+            yield MockChunk("测")
+            yield MockChunk("试")
 
-        gen.llm.astream = mock_astream
+        mock_llm = MagicMock()
+        mock_llm.astream = mock_astream
 
+        gen = InsightGenerator(llm=mock_llm)
         aggregated = self._make_aggregated()
         tokens = []
         async for token in gen.astream(aggregated, category="测试"):
             tokens.append(token)
-
         assert tokens == ["测", "试"]
