@@ -7,41 +7,6 @@ crawler.py — 真实数据抓取接口
 import os
 import json
 import random
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-
-
-@dataclass
-class NoteData:
-    """小红书笔记数据结构"""
-    title: str
-    content: str
-    brand: str = ""
-    likes: int = 0
-    comments_raw: list[str] = field(default_factory=list)
-    tags: list[str] = field(default_factory=list)
-    author: str = ""
-    url: str = ""
-
-
-class BaseCrawler(ABC):
-    """爬虫抽象基类"""
-
-    @abstractmethod
-    def search_notes(self, keyword: str, count: int = 30) -> list[NoteData]:
-        """搜索笔记"""
-        ...
-
-    @abstractmethod
-    def fetch_comments(self, note_url: str, count: int = 50) -> list[str]:
-        """获取单篇笔记的评论"""
-        ...
-
-    @abstractmethod
-    def is_available(self) -> bool:
-        """检查爬虫是否可用"""
-        ...
-
 
 # ============================================================
 # 统一入口
@@ -65,16 +30,16 @@ class CrawlerInterface:
             self._crawler = XHSCrawler(cookies_json=cookies_json)
             self._is_cloud = self._crawler.is_cloud_mode
             if self._crawler.is_logged_in:
-                mode = "☁️ 云端" if self._is_cloud else "💻 本地"
-                print(f"[Crawler] ✅ {mode}爬虫已就绪")
+                mode = "[Cloud] 云端" if self._is_cloud else "[Local] 本地"
+                print(f"[Crawler] [OK] {mode}爬虫已就绪")
             else:
                 if self._is_cloud:
-                    print("[Crawler] ☁️  云端未登录。请在 Streamlit Secrets 中配置 XHS_COOKIES")
+                    print("[Crawler] [Cloud] 云端未登录。请在 Streamlit Secrets 中配置 XHS_COOKIES")
                 else:
-                    print("[Crawler] ⚠️  本地未登录。运行: uv run python src/real_crawler.py \"品类名\" 登录")
+                    print("[Crawler] [WARN] 本地未登录。运行: uv run python src/real_crawler.py \"品类名\" 登录")
         except Exception as e:
             self._init_error = str(e)
-            print(f"[Crawler] ❌ 爬虫初始化失败: {e}")
+            print(f"[Crawler] [FAIL] 爬虫初始化失败: {e}")
 
     @property
     def is_available(self) -> bool:
@@ -90,6 +55,18 @@ class CrawlerInterface:
     def is_cloud(self) -> bool:
         """是否云端模式"""
         return self._is_cloud
+
+    def login(self, timeout_minutes: int = 5) -> bool:
+        """
+        交互式登录：打开浏览器等待用户扫码。
+
+        Returns:
+            True 表示登录成功，False 表示失败/超时
+        """
+        if not self._crawler:
+            print(f"[Crawler] 爬虫不可用: {self._init_error}")
+            return False
+        return self._crawler.login_interactive(timeout_minutes=timeout_minutes)
 
     def crawl(self, category: str, count: int = 30) -> dict:
         """

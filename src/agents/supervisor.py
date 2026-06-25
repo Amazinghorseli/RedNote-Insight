@@ -22,16 +22,6 @@ class Supervisor:
         """获取 Supervisor prompt（从 YAML 加载）"""
         return self.prompt_loader.load("supervisor", "v1")
 
-    def decide(self, question: str, available_strategies: list[str]) -> str:
-        """返回选中的策略名（同步版本）"""
-        prompt = self._get_prompt()
-        msg = prompt.format_messages(question=question)
-        strategy = self.llm.invoke(msg).content.strip().lower()
-        if strategy not in available_strategies:
-            strategy = "hybrid"
-        logger.info(f"Supervisor 策略: {strategy}")
-        return strategy
-
     async def adecide(self, question: str, available_strategies: list[str]) -> str:
         """返回选中的策略名（异步版本）"""
         prompt = self._get_prompt()

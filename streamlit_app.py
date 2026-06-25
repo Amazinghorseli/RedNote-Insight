@@ -29,7 +29,7 @@ def init_app():
     try:
         from src.ingestion import load_raw_documents, chunk_documents, build_vectorstore, rebuild_all_chunks
         from src.retrievers import HybridRetriever, APIReranker
-        from src.graph import build_graph
+        from src.graph import build_async_graph
         from rank_bm25 import BM25Okapi
         import jieba
 
@@ -67,7 +67,7 @@ def init_app():
             return [chunks[i] for i in top_idx]
 
         # Step 4: 构建 LangGraph
-        graph = build_graph(vectorstore, bm25_search, hybrid_retriever, reranker=reranker)
+        graph = build_async_graph(vectorstore, bm25_search, hybrid_retriever, reranker=reranker)
 
         status.success("")
         progress.empty()
@@ -126,8 +126,8 @@ def _rebuild():
         scores = state["bm25"].get_scores(list(jieba.cut(q2)))
         return [chunks[i] for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]]
     state["bm25_search"] = bms
-    from src.graph import build_graph
-    state["graph"] = build_graph(state["vectorstore"], bms, hr, reranker=state["reranker"])
+    from src.graph import build_async_graph
+    state["graph"] = build_async_graph(state["vectorstore"], bms, hr, reranker=state["reranker"])
 
 def _auto_fetch(keyword: str, count: int = 30) -> int:
     """自动抓取：使用真实爬虫从小红书抓取笔记和评论。返回抓取篇数。"""
@@ -365,8 +365,8 @@ else:
                     scores = state["bm25"].get_scores(list(jieba.cut(q2)))
                     return [chunks[i] for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]]
                 state["bm25_search"] = bms
-                from src.graph import build_graph
-                state["graph"] = build_graph(state["vectorstore"], bms, hr, reranker=state["reranker"])
+                from src.graph import build_async_graph
+                state["graph"] = build_async_graph(state["vectorstore"], bms, hr, reranker=state["reranker"])
 
                 log_area.success(f"✅ 完成！已抓取 {saved} 篇「{category}」笔记，知识库已更新。")
                 progress_bar.progress(100)

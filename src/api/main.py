@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from src.config import settings
 from src.core.state import init_app_state
-from src.api.routes import health, qa, insight, evaluate, crawl, qa_stream, insight_stream
+from src.api.routes import health, qa, insight, evaluate, crawl, qa_stream, insight_stream, opportunities, trending
 
 
 # ===== 中间件 =====
@@ -134,6 +134,8 @@ app.include_router(qa_stream.router)
 app.include_router(insight_stream.router)
 app.include_router(evaluate.router)
 app.include_router(crawl.router)
+app.include_router(opportunities.router)
+app.include_router(trending.router)
 
 # ---- 静态文件托管 ----
 static_dir = Path(__file__).parent.parent.parent / "static"

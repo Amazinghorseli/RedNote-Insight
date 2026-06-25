@@ -197,32 +197,6 @@ class APIReranker:
         return scores
 
 
-class Reranker:
-    """使用 CrossEncoder 对检索结果重排序（本地模式，需安装 sentence-transformers）"""
-
-    def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3"):
-        try:
-            from sentence_transformers import CrossEncoder
-        except ImportError:
-            raise ImportError(
-                "本地 Reranker 需要 sentence-transformers。"
-                "请运行: pip install sentence-transformers\n"
-                "或使用 APIReranker（基于 API，无需本地模型）"
-            )
-        logger.info(f"[Reranker] 加载模型: {model_name}")
-        self.model = CrossEncoder(model_name)
-
-    def rerank(self, query: str, documents: list[Document], top_k: int = 3) -> list[Document]:
-        if not documents:
-            return []
-        pairs = [(query, doc.page_content) for doc in documents]
-        scores = self.model.predict(pairs, show_progress_bar=False)
-        scored = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
-        reranked = [doc for doc, _ in scored[:top_k]]
-        logger.info(f"[Reranker] {len(documents)} -> {len(reranked)} 篇")
-        return reranked
-
-
 # ================================================================
 # PostgreSQL + pgvector 向量检索
 # ================================================================

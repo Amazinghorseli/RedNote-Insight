@@ -69,7 +69,7 @@ class XHSCrawler:
                                      "/usr/bin/google-chrome", "/usr/bin/chrome"]:
                     if os.path.exists(browser_path):
                         co.set_browser_path(browser_path)
-                        print(f"[Crawler] ☁️  云端模式，使用: {browser_path}")
+                        print(f"[Crawler] [Cloud] 云端模式，使用: {browser_path}")
                         break
 
         self.page = ChromiumPage(co)
@@ -93,16 +93,16 @@ class XHSCrawler:
         if self.cookies_json:
             try:
                 cookies = json.loads(self.cookies_json)
-                print(f"[Crawler] ☁️  从 Secrets 加载了 {len(cookies)} 个 cookie")
+                print(f"[Crawler] [Cloud] 从 Secrets 加载了 {len(cookies)} 个 cookie")
             except json.JSONDecodeError as e:
-                print(f"[Crawler] ⚠️  Secrets cookie 解析失败: {e}")
+                print(f"[Crawler] [WARN] Secrets cookie 解析失败: {e}")
 
         # 2. 本地模式：从文件加载
         if not cookies and os.path.exists(COOKIE_FILE):
             try:
                 with open(COOKIE_FILE, "r", encoding="utf-8") as f:
                     cookies = json.load(f)
-                print(f"[Crawler] 📁 从文件加载了 {len(cookies)} 个 cookie")
+                print(f"[Crawler] [File] 从文件加载了 {len(cookies)} 个 cookie")
             except Exception as e:
                 print(f"[Crawler] Cookie 文件加载失败: {e}")
 
@@ -115,45 +115,99 @@ class XHSCrawler:
                 self.page.set.cookies(cookies)
                 self.page.get("https://www.xiaohongshu.com")
                 time.sleep(2)
-                if "login" not in self.page.url:
+                if self._verify_logged_in():
                     self._logged_in = True
-                    print("[Crawler] ✅ Cookie 有效，已恢复登录态")
+                    print("[Crawler] [OK] Cookie 有效，已恢复登录态")
                     return
                 else:
-                    print("[Crawler] ⚠️  Cookie 已过期，需要重新登录")
+                    print("[Crawler] [WARN] Cookie 已过期，需要重新登录")
             except Exception as e:
                 print(f"[Crawler] Cookie 应用失败: {e}")
 
         self._logged_in = False
         if self._is_cloud:
-            print("[Crawler] ☁️  云端未登录。请在本地导出 cookie 并配置 Streamlit Secrets: XHS_COOKIES")
+            print("[Crawler] [Cloud] 云端未登录。请在本地导出 cookie 并配置 Streamlit Secrets: XHS_COOKIES")
         else:
-            print("[Crawler] ⚠️  未登录。请运行: uv run python src/real_crawler.py \"任意品类\" 来登录")
+            print("[Crawler] [WARN] 未登录。请运行: uv run python src/real_crawler.py \"品类名\" 来登录")
 
-    def login_interactive(self):
-        """交互式登录：打开浏览器，等待用户扫码后按 Enter"""
+    def _verify_logged_in(self) -> bool:
+        """
+        通过 cookie 和页面元素双重验证是否已登录小红书。
+        比单纯检查 URL 更可靠，因为 Xiaohongshu 可能使用弹窗登录而非页面跳转。
+        """
+        try:
+            # 方法1: 检查是否存在小红书认证 cookie
+            xhs_cookies = self.page.cookies(all_domains=True, all_info=False)
+            auth_cookie_names = {"a1", "web_session", "session", "sid", "authorization", "token", "xhs"}
+            for cookie in xhs_cookies:
+                name = cookie.get("name", "").lower()
+                if name in auth_cookie_names:
+                    val = cookie.get("value", "")
+                    if val and len(val) > 5:
+                        return True
+
+            # 方法2: 检查页面上登录后的特征元素
+            for selector in [
+                "css:.user-avatar",
+                "css:.avatar",
+                "css:[class*='avatar']",
+                "css:[class*='user']",
+                "xpath://img[contains(@class,'avatar')]",
+            ]:
+                try:
+                    el = self.page.ele(selector, timeout=0.5)
+                    if el:
+                        return True
+                except Exception:
+                    continue
+
+            # 方法3: 如果当前在登录页，尝试导航到首页后再次检查 cookie
+            url = self.page.url or ""
+            if "login" in url or "passport" in url:
+                self.page.get("https://www.xiaohongshu.com")
+                time.sleep(2)
+                # 导航后直接检查 cookie（避免递归）
+                xhs_cookies = self.page.cookies(all_domains=True, all_info=False)
+                for cookie in xhs_cookies:
+                    name = cookie.get("name", "").lower()
+                    if name in auth_cookie_names:
+                        val = cookie.get("value", "")
+                        if val and len(val) > 5:
+                            return True
+        except Exception:
+            pass
+        return False
+
+    def login_interactive(self, timeout_minutes=5):
+        """
+        交互式登录：打开浏览器，等待用户扫码登录。
+        使用 URL + cookie + 页面元素三重检测，避免传统 URL-only 检测的误判。
+        """
         if self._logged_in:
             print("[Crawler] 已登录，无需重复操作")
             return True
 
         print("[Crawler] 正在打开小红书登录页...")
         self.page.get("https://www.xiaohongshu.com")
-        print("[Crawler] 👆 请在浏览器窗口中扫码登录")
-        print("[Crawler] ⏳ 等待登录完成...")
+        print("[Crawler] [Action] 请在浏览器窗口中扫码登录")
+        print(f"[Crawler] [Wait] 等待登录完成（最长{timeout_minutes}分钟）...")
 
-        # 轮询检测登录状态（最多等 5 分钟）
-        for _ in range(150):
+        # 轮询检测登录状态（每2秒检测一次）
+        max_attempts = timeout_minutes * 30  # 2秒间隔
+        for attempt in range(max_attempts):
             time.sleep(2)
             try:
-                if "login" not in self.page.url:
-                    print("[Crawler] ✅ 登录成功！")
+                if self._verify_logged_in():
+                    print("[Crawler] [OK] 登录成功！")
                     self._logged_in = True
                     self._save_cookies()
                     return True
             except Exception:
                 pass
 
-        print("[Crawler] ❌ 登录超时（5分钟），请重试")
+        current_url = self.page.url[:80] if self.page else "N/A"
+        print(f"[Crawler] [FAIL] 登录超时（{timeout_minutes}分钟），当前URL: {current_url}")
+        print("[Crawler] [Hint] 如果已扫码但没有反应，请刷新页面重新扫码")
         return False
 
     def _save_cookies(self):
@@ -172,7 +226,7 @@ class XHSCrawler:
         搜索关键词，返回笔记列表。
         每篇笔记包含: id, title, url
         """
-        print(f"\n[Crawler] 🔍 搜索: {keyword}（目标 {count} 篇）")
+        print(f"\n[Crawler] [Search] 搜索: {keyword}（目标 {count} 篇）")
         notes = []
 
         url = SEARCH_URL.format(keyword)
@@ -250,13 +304,13 @@ class XHSCrawler:
             last_count = len(notes)
             print(f"\r[Crawler]   已发现 {len(notes)} 篇...", end="")
 
-        print(f"\n[Crawler] ✅ 搜索完成，共 {len(notes[:count])} 篇笔记")
+        print(f"\n[Crawler] [OK] 搜索完成，共 {len(notes[:count])} 篇笔记")
         return notes[:count]
 
     def get_note_detail(self, note: dict) -> dict:
         """获取单篇笔记的正文内容"""
         title_short = note.get('title', '')[:30]
-        print(f"[Crawler]   📄 {title_short}...")
+        print(f"[Crawler] [Page] {title_short}...")
         try:
             self.page.get(note["url"])
             time.sleep(random.uniform(2.0, 4.0))
@@ -302,7 +356,7 @@ class XHSCrawler:
             note["likes"] = likes
             note["author"] = author
         except Exception as e:
-            print(f"        ⚠️  获取详情失败: {e}")
+            print(f"        [WARN] 获取详情失败: {e}")
             note["content"] = note.get("content", "")
             note["likes"] = note.get("likes", 0)
             note["author"] = note.get("author", "")
@@ -344,9 +398,9 @@ class XHSCrawler:
                 except Exception:
                     continue
 
-            print(f"[Crawler]   💬 获取到 {len(comments[:max_comments])} 条评论")
+            print(f"[Crawler] [Comments] 获取到 {len(comments[:max_comments])} 条评论")
         except Exception as e:
-            print(f"        ⚠️  评论获取失败: {e}")
+            print(f"        [WARN] 评论获取失败: {e}")
 
         return comments[:max_comments]
 
@@ -469,22 +523,22 @@ class XHSCrawler:
     def crawl(self, category: str, count: int = 30, with_comments: bool = True):
         """完整抓取流程"""
         if not self._logged_in:
-            msg = ("[Crawler] ❌ 未登录，无法抓取\n"
-                   "[Crawler] 💡 本地: uv run python src/real_crawler.py \"品类名\" 登录\n"
-                   "[Crawler] 💡 云端: 在 Streamlit Secrets 中配置 XHS_COOKIES")
+            msg = ("[Crawler] [FAIL] 未登录，无法抓取\n"
+                   "[Crawler] [Hint] 本地: uv run python src/real_crawler.py \"品类名\" 登录\n"
+                   "[Crawler] [Hint] 云端: 在 Streamlit Secrets 中配置 XHS_COOKIES")
             print(msg)
             return 0
 
         os.makedirs(RAW_DIR, exist_ok=True)
 
         print(f"\n{'='*60}")
-        print(f"[Crawler] 🕷️  开始抓取: {category}")
+        print(f"[Crawler] [Crawl]  开始抓取: {category}")
         print(f"{'='*60}")
 
         # 1. 搜索笔记
         notes = self.search(category, count)
         if not notes:
-            print("[Crawler] ❌ 无搜索结果")
+            print("[Crawler] [FAIL] 无搜索结果")
             return 0
 
         # 2. 逐篇抓取详情 + 评论
@@ -503,10 +557,10 @@ class XHSCrawler:
             # 随机间隔，避免被封
             if i < len(notes) - 1:
                 delay = random.uniform(3.0, 6.0)
-                print(f"        ⏳ 等待 {delay:.0f}s...")
+                print(f"        [Wait] {delay:.0f}s...")
                 time.sleep(delay)
 
-        print(f"\n[Crawler] ✅ 完成！共保存 {saved} 篇笔记 → {RAW_DIR}")
+        print(f"\n[Crawler] [OK] 完成！共保存 {saved} 篇笔记 → {RAW_DIR}")
         return saved
 
     def close(self):
@@ -532,11 +586,11 @@ if __name__ == "__main__":
         # CLI 模式：如果未登录，交互式等待登录
         if not crawler.is_logged_in:
             if not crawler.login_interactive():
-                print("❌ 登录失败，退出")
+                print("[FAIL] 登录失败，退出")
                 sys.exit(1)
 
         saved = crawler.crawl(args.category, args.count, with_comments=not args.no_comments)
-        print(f"\n✅ 已抓取 {saved} 篇，存储于 {RAW_DIR}")
+        print(f"\n[OK] 已抓取 {saved} 篇，存储于 {RAW_DIR}")
         print(f"   运行 'uv run uvicorn api:app --reload' 后即可查询「{args.category}」")
     finally:
         crawler.close()

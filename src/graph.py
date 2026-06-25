@@ -20,6 +20,7 @@ from src.config import LLM_CONFIG, RETRY_LIMIT, RERANKER_THRESHOLD
 from src.retrievers import APIReranker
 from src.logger import logger
 from src.core.prompt_loader import get_prompt_loader
+from src.core.query_utils import clean_query, is_brand_comparison, resolve_k
 
 
 # ===== State =====
@@ -40,33 +41,45 @@ prompt_loader = get_prompt_loader()
 
 # ===== 图节点工厂（异步） =====
 def create_retrieve_node(vectorstore, bm25_retriever, hybrid_retriever):
-    """创建检索节点 — 由 Supervisor 选中的策略执行（异步）"""
-    K = 5
+    """创建检索节点 — 由 Supervisor 选中的策略执行（异步）
+
+    内置查询清洗 + 品牌/对比问题动态扩大检索范围。
+    """
+    BASE_K = 5
+    BRAND_K = 8
 
     async def retrieve_node(state: AgentState) -> dict:
         query = state.get("rewritten_question") or state["question"]
+        # 查询清洗：去除纯数字噪音
+        original = query
+        query = clean_query(query)
+        if query != original:
+            logger.info(f"查询清洗: '{original[:60]}' -> '{query[:60]}'")
+
         strategy = state.get("strategy", "hybrid")
-        logger.info(f"策略={strategy} | 查询={query[:60]}")
+        # 品牌/对比问题：扩大检索范围
+        k = resolve_k(query, BASE_K, BRAND_K)
+        logger.info(f"策略={strategy} | K={k} | 查询={query[:60]}")
 
         loop = asyncio.get_running_loop()
 
         if strategy == "hybrid":
-            docs = await hybrid_retriever.ahybrid_search(query)
+            docs = await hybrid_retriever.ahybrid_search(query, k=k, bm25_k=max(40, k*5), final_k=k)
         elif strategy == "vector":
             # 兼容 PG (async) 和 ChromaDB (sync) 向量存储
             if hasattr(vectorstore, 'similarity_search'):
                 import inspect
                 if inspect.iscoroutinefunction(vectorstore.similarity_search):
-                    docs = await vectorstore.similarity_search(query, k=K)
+                    docs = await vectorstore.similarity_search(query, k=k)
                 else:
                     docs = await loop.run_in_executor(
-                        None, lambda: vectorstore.similarity_search(query, k=K)
+                        None, lambda: vectorstore.similarity_search(query, k=k)
                     )
             else:
                 docs = []
         else:
             docs = await loop.run_in_executor(
-                None, lambda: bm25_retriever(query, k=K)
+                None, lambda: bm25_retriever(query, k=k)
             )
 
         logger.info(f"检索到 {len(docs)} 篇文档")
@@ -117,7 +130,7 @@ def create_rerank_node(reranker: APIReranker):
 async def rewrite_node(state: AgentState) -> dict:
     """重写查询，提高检索质量（异步）"""
     logger.info("优化查询重写...")
-    rewrite_prompt = prompt_loader.load("rewrite_query", "v1")
+    rewrite_prompt = prompt_loader.load("rewrite_query", "v2")
     msg = rewrite_prompt.format_messages(question=state["question"])
     response = await llm.ainvoke(msg)
     rewritten = response.content.strip()
@@ -133,7 +146,7 @@ async def generate_node(state: AgentState) -> dict:
     context = "\n---\n".join(
         f"[文档{i+1}] {d.page_content}" for i, d in enumerate(docs)
     )
-    gen_prompt = prompt_loader.load("gen_answer", "v1")
+    gen_prompt = prompt_loader.load("gen_answer", "v2")
     msg = gen_prompt.format_messages(context=context, question=state["question"])
     response = await llm.ainvoke(msg)
     return {"generation": response.content}
@@ -195,9 +208,3 @@ def build_async_graph(vectorstore, bm25_retriever, hybrid_retriever, reranker=No
     builder.add_edge("fallback", END)
 
     return builder.compile()
-
-
-# ===== 向下兼容 =====
-def build_graph(vectorstore, bm25_retriever, hybrid_retriever, reranker=None):
-    """兼容旧版同步接口"""
-    return build_async_graph(vectorstore, bm25_retriever, hybrid_retriever, reranker)

@@ -125,6 +125,28 @@ async def run_insight_stream(req: InsightStreamRequest, state: AppState = Depend
                 await asyncio.sleep(0)
 
                 crawler = CrawlerInterface(raw_dir=state.raw_dir)
+
+                # 如果爬虫存在但未登录，触发交互式登录流程（SSE 长连接可等待扫码）
+                if not crawler.is_available and crawler.needs_login:
+                    yield _sse_event("stage", {
+                        "stage": "login",
+                        "message": "需要登录小红书，正在打开浏览器窗口，请在浏览器中扫码登录..."
+                    })
+                    await asyncio.sleep(0)
+
+                    login_ok = await asyncio.to_thread(crawler.login, 5)
+                    if not login_ok:
+                        yield _sse_event("error", {
+                            "message": f"知识库无「{category}」数据，且登录失败或超时。"
+                        })
+                        return
+
+                    yield _sse_event("stage", {
+                        "stage": "login_ok",
+                        "message": "小红书登录成功，开始抓取数据..."
+                    })
+                    await asyncio.sleep(0)
+
                 if not crawler.is_available:
                     yield _sse_event("error", {
                         "message": f"知识库无「{category}」数据，且爬虫不可用。"

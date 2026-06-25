@@ -13,6 +13,42 @@ from src.config import RAW_DIR, CHROMA_DIR, EMBEDDING_CONFIG
 from src.logger import logger
 
 
+# ===== 文档清洗 =====
+
+def _extract_fm_prefix(text: str) -> str:
+    """从 frontmatter 中提取品牌/价格关键信息，返回元数据前缀文本"""
+    import re
+    import yaml as _yaml
+    fm_match = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
+    if not fm_match:
+        return ""
+    try:
+        fm = _yaml.safe_load(fm_match.group(1))
+        if not isinstance(fm, dict):
+            return ""
+        parts = []
+        if fm.get("brand") and fm["brand"] != "综合测评":
+            parts.append(f"品牌：{fm['brand']}")
+        if fm.get("price"):
+            parts.append(f"价格：{fm['price']}元")
+        if fm.get("tags") and isinstance(fm["tags"], list):
+            useful_tags = [t for t in fm["tags"] if t not in ("小红书爆款", "磁吸感好物")]
+            if useful_tags:
+                parts.append(f"标签：{'、'.join(useful_tags)}")
+        return "【" + " | ".join(parts) + "】" if parts else ""
+    except Exception:
+        return ""
+
+
+def _clean_frontmatter(text: str) -> str:
+    """统一的 frontmatter + HTML 注释清理，保留关键元数据到文本前缀"""
+    import re
+    prefix = _extract_fm_prefix(text)
+    text = re.sub(r"^---\s*\n.*?\n---\s*\n", "", text, count=1, flags=re.DOTALL)
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    return (prefix + "\n" + text).strip() if prefix else text.strip()
+
+
 # ===== 文档加载 =====
 def load_raw_documents() -> list[Document]:
     """加载 data/raw/ 下的所有 .md 文件，去掉 frontmatter 和评论分析区"""
@@ -32,15 +68,9 @@ def load_raw_documents() -> list[Document]:
     )
     raw_docs = loader.load() + loader_txt.load()
 
-    # 去掉 YAML frontmatter（--- ... ---）
-    import re
+    # 去掉 YAML frontmatter（--- ... ---），但保留品牌/品类/价格等关键字段
     for doc in raw_docs:
-        text = doc.page_content
-        # 去掉 frontmatter
-        text = re.sub(r"^---\s*\n.*?\n---\s*\n", "", text, count=1, flags=re.DOTALL)
-        # 去掉 HTML 评论分析区
-        text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
-        doc.page_content = text.strip()
+        doc.page_content = _clean_frontmatter(doc.page_content)
 
     logger.info(f"加载了 {len(raw_docs)} 个原始文档")
     return raw_docs
@@ -102,7 +132,6 @@ def incremental_ingest(raw_dir: str, vectorstore: Chroma) -> list:
     用法：
         new_chunks = incremental_ingest(str(RAW_DIR), vectorstore)
     """
-    import re
     from langchain_community.document_loaders import TextLoader, DirectoryLoader
 
     # 1. 加载所有 .md 文件（包括已有的，Chromadb 内置去重）
@@ -120,12 +149,9 @@ def incremental_ingest(raw_dir: str, vectorstore: Chroma) -> list:
     )
     all_docs = loader.load() + loader_txt.load()
 
-    # 2. 清理 frontmatter 和 HTML 注释
+    # 2. 清理 frontmatter 和 HTML 注释（保留品牌元数据）
     for doc in all_docs:
-        text = doc.page_content
-        text = re.sub(r"^---\s*\n.*?\n---\s*\n", "", text, count=1, flags=re.DOTALL)
-        text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
-        doc.page_content = text.strip()
+        doc.page_content = _clean_frontmatter(doc.page_content)
 
     # 3. 只 chunk 全部文档，然后添加到向量库
     # Chromadb 的 add_documents 会根据 doc id 自动去重
@@ -144,7 +170,6 @@ def rebuild_all_chunks(raw_dir: str) -> list:
     重新加载全部文档并 chunk，用于重建 BM25 索引。
     返回完整的 chunks 列表。
     """
-    import re
     from langchain_community.document_loaders import TextLoader, DirectoryLoader
 
     loader = DirectoryLoader(
@@ -162,10 +187,7 @@ def rebuild_all_chunks(raw_dir: str) -> list:
     all_docs = loader.load() + loader_txt.load()
 
     for doc in all_docs:
-        text = doc.page_content
-        text = re.sub(r"^---\s*\n.*?\n---\s*\n", "", text, count=1, flags=re.DOTALL)
-        text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
-        doc.page_content = text.strip()
+        doc.page_content = _clean_frontmatter(doc.page_content)
 
     return chunk_documents(all_docs, chunk_size=512, overlap=64)
 
@@ -173,14 +195,6 @@ def rebuild_all_chunks(raw_dir: str) -> list:
 # ================================================================
 # PostgreSQL + pgvector 异步 Ingestion
 # ================================================================
-
-def _clean_frontmatter(text: str) -> str:
-    """统一的 frontmatter + HTML 注释清理"""
-    import re
-    text = re.sub(r"^---\s*\n.*?\n---\s*\n", "", text, count=1, flags=re.DOTALL)
-    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
-    return text.strip()
-
 
 async def ingest_to_pg(raw_dir: str = None) -> int:
     """将所有文档 embedding 后写入 PostgreSQL + pgvector

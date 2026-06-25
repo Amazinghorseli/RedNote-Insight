@@ -74,11 +74,27 @@ async def _run_insight_async(query: str, state: AppState) -> dict:
     else:
         crawler = CrawlerInterface(raw_dir=state.raw_dir)
         if not crawler.is_available:
-            return {
-                "report": f"知识库无「{query}」数据，且爬虫不可用。\n\n"
-                          f"💡 请先在命令行运行 `uv run python src/real_crawler.py \"{query}\"` 登录并抓取数据。",
-                "notes_count": 0, "generated_count": 0,
-            }
+            # 如果爬虫存在但未登录，尝试快速登录（60秒等待）
+            if crawler.needs_login:
+                login_ok = await asyncio.to_thread(crawler.login, 1)
+                if login_ok:
+                    # 登录成功，继续抓取
+                    pass
+                else:
+                    return {
+                        "report": f"知识库无「{query}」数据，且爬虫未登录。\n\n"
+                                  f"请使用流式接口（POST /api/insight/stream）触发交互式登录，\n"
+                                  f"或先在命令行运行:\n"
+                                  f"  uv run python src/real_crawler.py \"{query}\"\n"
+                                  f"完成登录后再试。",
+                        "notes_count": 0, "generated_count": 0,
+                    }
+            else:
+                return {
+                    "report": f"知识库无「{query}」数据，且爬虫不可用。\n\n"
+                              f"请先在命令行运行 `uv run python src/real_crawler.py \"{query}\"` 登录并抓取数据。",
+                    "notes_count": 0, "generated_count": 0,
+                }
 
         result = await asyncio.to_thread(crawler.crawl, query, CRAWL_COUNT)
         crawled_count = result["count"]
