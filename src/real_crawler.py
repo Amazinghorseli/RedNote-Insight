@@ -563,6 +563,282 @@ class XHSCrawler:
         print(f"\n[Crawler] [OK] 完成！共保存 {saved} 篇笔记 → {RAW_DIR}")
         return saved
 
+    # ============================================================
+    # 热榜抓取（偷懒模式：只抓搜索建议，不翻页面）
+    # ============================================================
+    def fetch_hot_search(self, max_items: int = 30) -> list[dict]:
+        """
+        从小红书探索页 + 搜索框抓取热门搜索关键词。
+
+        策略 A: 首页搜索框下拉热词
+        策略 B: 探索页热门笔记标题提取关键词
+        策略 C: 兜底内置词库
+        """
+        print(f"\n[Crawler] [HotSearch] 开始抓取小红书热榜...")
+        items = []
+
+        try:
+            # ═══ 策略 A: 搜索框下拉热词 ═══
+            self.page.get("https://www.xiaohongshu.com")
+            time.sleep(4)
+            print("[Crawler] [HotSearch] 主页加载完成")
+
+            # 尝试激活搜索框
+            search_clicked = False
+            for selector in [
+                "css:#search-input",
+                "css:input[placeholder*='搜索']",
+                "css:.search-input",
+                "css:[class*='search'] input",
+                "css:input[type='text']",
+            ]:
+                try:
+                    el = self.page.ele(selector, timeout=3)
+                    if el:
+                        el.click()
+                        search_clicked = True
+                        print(f"[Crawler] [HotSearch] 搜索框已激活: {selector}")
+                        break
+                except Exception:
+                    continue
+
+            if search_clicked:
+                time.sleep(3)  # 等下拉面板渲染
+                page_html = self.page.html or ""
+
+                # 方法 1: 面板文本提取
+                panel_texts = []
+                for panel_sel in [
+                    "css:.search-suggest-panel",
+                    "css:.suggest-panel",
+                    "css:[class*='suggest-panel']",
+                    "css:[class*='search-panel']",
+                    "css:[class*='dropdown-panel']",
+                    "css:.suggest-list",
+                    "css:[class*='hot-search']",
+                ]:
+                    try:
+                        panel = self.page.ele(panel_sel, timeout=2)
+                        if panel:
+                            t = panel.text.strip()
+                            if t:
+                                panel_texts.append(t)
+                                print(f"[Crawler] [HotSearch] 面板命中: {panel_sel} → {t[:100]}...")
+                    except Exception:
+                        continue
+
+                # 方法 2: 所有 suggest/search 相关的 span/div
+                if not panel_texts:
+                    suggest_els = []
+                    for sel in [
+                        "css:[class*='suggest'] span",
+                        "css:[class*='search'] div[class*='item'] span",
+                        "css:[class*='hot'] span",
+                        "css:[class*='trend'] span",
+                    ]:
+                        try:
+                            found = self.page.eles(sel, timeout=2)
+                            if found:
+                                suggest_els.extend(found)
+                        except Exception:
+                            continue
+
+                    if suggest_els:
+                        combined = " ".join([el.text.strip() for el in suggest_els if el.text and len(el.text.strip()) >= 2])
+                        if combined:
+                            panel_texts = [combined]
+
+                # 解析面板文本
+                if panel_texts:
+                    seen_keywords = set()
+                    rank = 0
+                    for pt in panel_texts:
+                        for line in pt.replace('\t', '\n').split('\n'):
+                            kw = line.strip()
+                            # 清理：去掉数字前缀、热度标记等
+                            import re as re_mod
+                            kw = re_mod.sub(r'^\d+[\.\、\)\s]*', '', kw)
+                            kw = re_mod.sub(r'\s*(热|新|荐|🔥|📈|HOT|爆)$', '', kw)
+                            kw = kw.strip()
+
+                            if not kw or len(kw) < 2 or len(kw) > 25:
+                                continue
+                            if kw in seen_keywords:
+                                continue
+                            if re_mod.match(r'^[\d\.\s\-—，,]+$', kw):
+                                continue
+                            if '小红书' in kw or '登录' in kw or '注册' in kw:
+                                continue
+
+                            seen_keywords.add(kw)
+                            rank += 1
+                            items.append({
+                                "keyword": kw,
+                                "rank": rank,
+                                "tag": "热" if rank <= 5 else ("新" if rank <= 15 else ""),
+                                "category": self._guess_category(kw),
+                                "trend": "up" if rank <= 10 else "stable",
+                                "hots": max(100 - rank * 3, 10),
+                            })
+                            if len(items) >= max_items:
+                                break
+                        if len(items) >= max_items:
+                            break
+
+            # ═══ 策略 B: 探索页热门笔记提取 ═══
+            if len(items) < 5:
+                print("[Crawler] [HotSearch] 策略B: 探索页提取热门笔记标题")
+                self.page.get("https://www.xiaohongshu.com/explore")
+                time.sleep(5)
+
+                # 滚动加载内容
+                for _ in range(4):
+                    self.page.scroll.to_bottom()
+                    time.sleep(2)
+
+                # 精确提取笔记卡片标题（排除页面 chrome）
+                title_els = []
+                title_selectors = [
+                    "css:a[href*='/explore/'] div.title",
+                    "css:a[href*='/explore/'] .title",
+                    "css:section.note-item .title",
+                    "css:.note-item .title",
+                    "css:.feeds-page .note-item a.title",
+                ]
+                for sel in title_selectors:
+                    try:
+                        found = self.page.eles(sel, timeout=2)
+                        if found and len(found) > 3:
+                            title_els = found
+                            print(f"[Crawler] [HotSearch] 探索页标题命中: {sel} → {len(found)} 条")
+                            break
+                    except Exception:
+                        continue
+
+                # 如果标准选择器失败，用更宽泛的获取方式
+                if not title_els:
+                    # 从页面链接提取
+                    try:
+                        links = self.page.eles("css:a[href*='/explore/']", timeout=3)
+                        note_links = [l for l in links if l and l.text and len(l.text.strip()) > 3
+                                     and 'footer' not in (getattr(l, 'parent', None) or '')]
+                        title_els = note_links
+                        print(f"[Crawler] [HotSearch] 探索页链接提取: {len(title_els)} 条")
+                    except Exception:
+                        pass
+
+                # 过滤页面 chrome（导航、版权、菜单等）
+                blacklist = {
+                    "创作中心", "业务合作", "关于我们", "联系我们", "用户协议",
+                    "隐私政策", "举报", "帮助", "反馈", "登录", "注册",
+                    "首页", "发现", "消息", "通知", "我", "搜索",
+                    "下载", "APP", "小程序", "桌面版", "手机版",
+                    "关注", "推荐", "热门", "最新", "商品", "店铺",
+                    "收藏", "点赞", "评论", "分享", "更多",
+                    "小红书", "沪ICP", "ICP备", "备案", "版权所有",
+                    "Cookie", "隐私", "条款", "广告", "推广",
+                }
+
+                # 从标题提取关键词
+                title_keywords = {}
+                import re as re_mod
+                for el in title_els[:60]:
+                    try:
+                        t = el.text.strip()
+                        if not t or len(t) < 3 or len(t) > 60:
+                            continue
+                        # 过滤黑名单
+                        if t in blacklist or any(b in t for b in blacklist if len(b) >= 3):
+                            continue
+
+                        # 拆分提取有意义的词组
+                        for kw in re_mod.split(r'[，。,\.、\s#＃｜|【】\[\]（）\(\)]+', t):
+                            kw = kw.strip()
+                            if 2 <= len(kw) <= 15 and not re_mod.match(r'^[\d\.\s\-—，,、/\?？！!]+$', kw):
+                                if kw not in blacklist:
+                                    title_keywords[kw] = title_keywords.get(kw, 0) + 1
+                    except Exception:
+                        continue
+
+                # 按频次排序
+                sorted_kws = sorted(title_keywords.items(), key=lambda x: -x[1])
+                existing = {i["keyword"] for i in items}
+                rank = len(items)
+                for kw, freq in sorted_kws:
+                    if kw in existing or len(kw) < 2 or kw in blacklist:
+                        continue
+                    rank += 1
+                    items.append({
+                        "keyword": kw,
+                        "rank": rank,
+                        "tag": "热" if rank <= 5 else "",
+                        "category": self._guess_category(kw),
+                        "trend": "up" if freq >= 3 else "stable",
+                        "hots": min(freq * 25, 100),
+                    })
+                    existing.add(kw)
+                    if len(items) >= max_items:
+                        break
+
+                if items:
+                    print(f"[Crawler] [HotSearch] 探索页提取到 {len(items)} 个有效关键词")
+
+            # ═══ 策略 C: 兜底 ═══
+            if not items:
+                print("[Crawler] [HotSearch] 兜底：使用内置热榜词库")
+                items = self._fallback_hot_list()
+
+            print(f"[Crawler] [HotSearch] 最终提取到 {len(items)} 条热词")
+
+        except Exception as e:
+            print(f"[Crawler] [HotSearch] 异常: {e}")
+            import traceback
+            traceback.print_exc()
+            items = self._fallback_hot_list()
+
+        return items
+
+    @staticmethod
+    def _guess_category(text: str) -> str:
+        """根据关键词猜测品类"""
+        cat_map = {
+            "穿搭": "服饰", "衣服": "服饰", "裙子": "服饰", "鞋": "服饰",
+            "化妆": "美妆", "护肤": "美妆", "口红": "美妆", "面膜": "美妆",
+            "零食": "食品", "吃": "食品", "蛋糕": "食品", "奶茶": "食品",
+            "家居": "家居", "收纳": "家居", "装修": "家居", "灯": "家居",
+            "手机": "数码", "耳机": "数码", "电脑": "数码",
+            "健身": "运动", "运动": "运动", "瑜伽": "运动",
+            "猫": "宠物", "狗": "宠物", "宠物": "宠物",
+            "旅行": "旅游", "旅游": "旅游", "酒店": "旅游",
+            "养娃": "母婴", "宝宝": "母婴", "孕": "母婴",
+        }
+        for kw, cat in cat_map.items():
+            if kw in text:
+                return cat
+        return "其他"
+
+    @staticmethod
+    def _fallback_hot_list() -> list[dict]:
+        """兜底热榜（极简内置词库，避免空榜）"""
+        fallback = [
+            "穿搭", "化妆", "护肤", "减肥", "健身",
+            "收纳", "装修", "零食", "奶茶", "咖啡",
+            "穿搭灵感", "显瘦穿搭", "平价好物", "家居好物", "数码好物",
+            "通勤穿搭", "早春穿搭", "夜间护肤", "抗老", "美白",
+            "宠物用品", "旅行攻略", "本地美食", "周末去哪儿", "读书推荐",
+        ]
+        items = []
+        for i, kw in enumerate(fallback):
+            items.append({
+                "keyword": kw,
+                "rank": i + 1,
+                "tag": "热" if i < 5 else "",
+                "category": XHSCrawler._guess_category(kw),
+                "trend": "up" if i < 10 else "stable",
+                "hots": max(100 - i * 3, 15),
+            })
+        return items
+
     def close(self):
         if self.page:
             try:

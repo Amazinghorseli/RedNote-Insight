@@ -16,6 +16,10 @@
                 <div class="tagline">小红书选品 · 机会评分 · 执行清单</div>
             </div>
             <nav class="nav-tabs">
+                <button class="nav-tab" data-tab="hotlist">
+                    <span class="tab-icon">&#x1F4A1;</span>
+                    灵感库
+                </button>
                 <button class="nav-tab active" data-tab="discover">
                     <span class="tab-icon">&#x1F3AF;</span>
                     发现机会
@@ -34,14 +38,15 @@
 
                 <!-- Hero 区域 -->
                 <div class="hero-section">
-                    <h1 class="hero-title">&#x1F50D; 今天该卖什么？</h1>
-                    <p class="hero-desc">不知道卖什么？看看小红书现在什么在火。输入品类名查详情，或直接浏览下方机会排行。</p>
+                    <h1 class="hero-title">&#x1F50D; 选品雷达 + 选题引擎</h1>
+                    <p class="hero-desc">输入品类名，一键生成两套方案。<strong>选品分析</strong>看商机，<strong>博主方案</strong>看脚本——博主直接复制就能拍。</p>
                     <div class="input-card">
                         <div class="input-row">
                             <input type="text" class="main-input" id="category-input"
-                                   placeholder="输入品类名，例如：磁吸感应灯" list="category-suggestions">
+                                   placeholder="输入品类名，例如：辣条、磁吸感应灯" list="category-suggestions">
                             <datalist id="category-suggestions"></datalist>
-                            <button class="btn-primary" id="search-btn">&#x1F50D; 查详情</button>
+                            <button class="btn-primary" id="search-btn">&#x1F50D; 选品分析</button>
+                            <button class="btn-agent" id="agent-btn">&#x1F3AC; 博主方案</button>
                         </div>
                         <div class="quick-tags" id="quick-tags">
                             <span class="quick-tag-label">热门：</span>
@@ -87,6 +92,33 @@
                     </div>
                 </div>
 
+            </div>
+
+            <!-- ===== 灵感库 Tab ===== -->
+            <div class="tab-content" id="tab-hotlist">
+                <div class="hero-section" style="margin-bottom:24px;">
+                    <h1 class="hero-title">&#x1F4A1; 灵感库</h1>
+                    <p class="hero-desc">不知道搜什么？按品类浏览精选方向，每条都保证有数据，点一下就是选品+选题双报告。</p>
+                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                        <span style="font-size:13px;color:var(--text-secondary);">&#x1F4C5; <span id="hotlist-date">加载中...</span></span>
+                        <button class="btn-text" id="refresh-hotlist-btn">&#x1F504; 刷新</button>
+                    </div>
+                    <div class="hotlist-filters" id="hotlist-filters" style="margin-top:12px;">
+                        <span class="hotlist-filter active" data-cat="全部">全部</span>
+                    </div>
+                </div>
+
+                <div id="hotlist-loading" class="loading-indicator" style="display:none;">
+                    <div class="loading-spinner"></div>
+                    <span>加载中...</span>
+                </div>
+
+                <div class="hotlist-board" id="hotlist-board">
+                    <div class="empty-state">
+                        <div class="empty-icon">&#x1F4CA;</div>
+                        <p>正在加载热榜数据...</p>
+                    </div>
+                </div>
             </div>
 
         </main>

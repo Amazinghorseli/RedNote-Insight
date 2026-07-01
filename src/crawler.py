@@ -97,3 +97,21 @@ class CrawlerInterface:
             "count": saved,
             "details": [],
         }
+
+    def fetch_hot_list(self, max_items: int = 30) -> list[dict]:
+        """
+        抓取小红书实时热榜（轻量，不需要登录）
+
+        Returns:
+            [{"keyword": "辣条", "tag": "热", "rank": 1, "category": "食品", ...}, ...]
+        """
+        if not self._crawler:
+            print(f"[Crawler] 爬虫不可用，使用兜底热榜: {self._init_error}")
+            from src.real_crawler import XHSCrawler
+            return XHSCrawler._fallback_hot_list()
+        try:
+            return self._crawler.fetch_hot_search(max_items=max_items)
+        except Exception as e:
+            print(f"[Crawler] 热榜抓取失败: {e}")
+            from src.real_crawler import XHSCrawler
+            return XHSCrawler._fallback_hot_list()

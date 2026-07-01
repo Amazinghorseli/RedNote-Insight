@@ -1,7 +1,8 @@
 """
-insight_stream.py — 选品洞察 SSE 流式端点
+insight_stream.py — 双报告 SSE 流式端点
 =============================================
-POST /api/insight/stream — 逐阶段 + 逐 token 输出洞察报告
+POST /api/insight/stream — 同时生成「选品报告」+「选题方案」
+SSE 事件: stage / token:selection / token:creator / done
 
 用法:
     curl -N -X POST http://localhost:8000/api/insight/stream \
@@ -33,31 +34,90 @@ def _sse_event(event: str, data: dict | str) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
+async def _stream_generator(gen, aggregated: dict, category: str, event_type: str):
+    """流式输出单个生成器，发射 event_type 事件"""
+    try:
+        async for chunk in gen.astream(aggregated, category=category):
+            if chunk:
+                yield _sse_event(event_type, {"token": chunk})
+    except Exception as e:
+        report = gen.generate_fallback(aggregated, category=category)
+        report += f"\n\n（注：LLM 生成失败，使用模板兜底。错误：{e}）"
+        yield _sse_event(event_type, {"token": report})
+
+
+async def _run_analysis_pipeline(category: str, state: AppState, MIN_NOTES=10, CRAWL_COUNT=30):
+    """运行检索→分析→聚合管道，返回 (aggregated, notes_count)"""
+    from src.agents.comment_agent import CommentAnalyzer
+    from src.agents.demand_agent import DemandAggregator
+    from src.crawler import CrawlerInterface
+
+    docs = await state.hybrid_retriever.ahybrid_search(
+        category, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES
+    )
+    if docs:
+        scores = await state.reranker.arerank(category, docs)
+        relevant = [doc for doc, s in zip(docs, scores) if s >= RERANKER_THRESHOLD]
+    else:
+        relevant = []
+
+    if len(relevant) >= 3:
+        analyzer = CommentAnalyzer(raw_dir=state.raw_dir)
+        analyses = analyzer.analyze(relevant)
+        if not analyses:
+            return None, 0, False
+        aggregator = DemandAggregator()
+        aggregated = aggregator.aggregate(analyses)
+        return aggregated, len(relevant), True
+    else:
+        # 爬虫兜底
+        crawler = CrawlerInterface(raw_dir=state.raw_dir)
+        if not crawler.is_available and crawler.needs_login:
+            login_ok = await asyncio.to_thread(crawler.login, 5)
+            if not login_ok:
+                return None, 0, False
+        if not crawler.is_available:
+            return None, 0, False
+
+        result = await asyncio.to_thread(crawler.crawl, category, CRAWL_COUNT)
+        if result["count"] == 0:
+            return None, 0, False
+
+        await state.rebuild_indexes()
+        await asyncio.sleep(0.5)
+
+        fresh_docs = await state.hybrid_retriever.ahybrid_search(
+            category, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES
+        )
+        fresh_scores = await state.reranker.arerank(category, fresh_docs) if fresh_docs else []
+        fresh_relevant = [doc for doc, s in zip(fresh_docs, fresh_scores) if s >= RERANKER_THRESHOLD]
+        if not fresh_relevant:
+            return None, 0, False
+
+        analyzer = CommentAnalyzer(raw_dir=state.raw_dir)
+        analyses = analyzer.analyze(fresh_relevant)
+        aggregator = DemandAggregator()
+        aggregated = aggregator.aggregate(analyses)
+        return aggregated, len(fresh_relevant), True
+
+
 @router.post("/api/insight/stream")
 async def run_insight_stream(req: InsightStreamRequest, state: AppState = Depends(get_app_state)):
-    """SSE 流式选品洞察报告"""
+    """SSE 流式：同时生成选品报告 + 选题方案"""
 
     async def event_stream():
         t0 = time.time()
         category = req.category
 
         try:
+            from src.agents.insight_agent import InsightGenerator
+            from src.agents.creator_agent import CreatorGenerator
+
             # ── 阶段 1: 检索 ──
             yield _sse_event("stage", {"stage": "retrieve", "message": f"正在检索「{category}」相关笔记..."})
             await asyncio.sleep(0)
 
-            from src.agents.comment_agent import CommentAnalyzer
-            from src.agents.demand_agent import DemandAggregator
-            from src.agents.insight_agent import InsightGenerator
-            from src.crawler import CrawlerInterface
-
-            MIN_NOTES = 10
-            CRAWL_COUNT = 30
-
-            docs = await state.hybrid_retriever.ahybrid_search(
-                category, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES
-            )
-
+            docs = await state.hybrid_retriever.ahybrid_search(category, k=10, bm25_k=40, final_k=10)
             if docs:
                 scores = await state.reranker.arerank(category, docs)
                 relevant = [doc for doc, s in zip(docs, scores) if s >= RERANKER_THRESHOLD]
@@ -71,131 +131,36 @@ async def run_insight_stream(req: InsightStreamRequest, state: AppState = Depend
             })
             await asyncio.sleep(0)
 
-            # ── 阶段 2: 评论分析 ──
-            yield _sse_event("stage", {"stage": "analyze", "message": "正在分析评论区数据..."})
+            # ── 阶段 2: 分析 + 聚合 ──
+            aggregated, notes_count, ok = await _run_analysis_pipeline(category, state)
+
+            if not ok or aggregated is None:
+                yield _sse_event("error", {"message": f"无法获取「{category}」的分析数据，请确认品类名称或尝试其他关键词"})
+                return
+
+            yield _sse_event("stage", {
+                "stage": "aggregated",
+                "message": f"识别到 {len(aggregated.get('top_complaints', []))} 个痛点，{len(aggregated.get('top_purchase_intents', []))} 个需求信号",
+            })
             await asyncio.sleep(0)
 
-            if len(relevant) >= 3:
-                analyzer = CommentAnalyzer(raw_dir=state.raw_dir)
-                analyses = analyzer.analyze(relevant)
+            # ── 阶段 3: 生成选品报告 ──
+            yield _sse_event("stage", {"stage": "generate_selection", "message": "正在生成选品洞察报告..."})
+            ins_gen = InsightGenerator()
+            async for event in _stream_generator(ins_gen, aggregated, category, "token:selection"):
+                yield event
 
-                if not analyses:
-                    yield _sse_event("error", {"message": "没有找到评论分析数据"})
-                    return
+            yield _sse_event("stage", {"stage": "selection_done", "message": "选品报告完成"})
 
-                yield _sse_event("stage", {
-                    "stage": "analyzed",
-                    "message": f"分析了 {len(analyses)} 条评论",
-                })
-                await asyncio.sleep(0)
+            # ── 阶段 4: 生成选题方案 ──
+            yield _sse_event("stage", {"stage": "generate_creator", "message": "正在生成选题方案..."})
+            cr_gen = CreatorGenerator()
+            async for event in _stream_generator(cr_gen, aggregated, category, "token:creator"):
+                yield event
 
-                # ── 阶段 3: 需求聚合 ──
-                yield _sse_event("stage", {"stage": "aggregate", "message": "正在聚合需求信号..."})
-                await asyncio.sleep(0)
+            yield _sse_event("stage", {"stage": "creator_done", "message": "选题方案完成"})
 
-                aggregator = DemandAggregator()
-                aggregated = aggregator.aggregate(analyses)
-
-                yield _sse_event("stage", {
-                    "stage": "aggregated",
-                    "message": f"识别到 {len(aggregated.get('top_complaints', []))} 个痛点",
-                })
-                await asyncio.sleep(0)
-
-                # ── 阶段 4: 生成报告（逐 token 流式）──
-                yield _sse_event("stage", {"stage": "generate", "message": "正在生成选品洞察报告..."})
-
-                generator = InsightGenerator()
-                try:
-                    async for chunk in generator.astream(aggregated, category=category):
-                        if chunk:
-                            yield _sse_event("token", {"token": chunk})
-                except Exception as e:
-                    report = generator.generate_fallback(aggregated, category=category)
-                    report += f"\n\n（注：LLM 生成失败，使用模板兜底。错误：{e}）"
-                    yield _sse_event("token", {"token": report})
-
-                yield _sse_event("stage", {"stage": "done_generate", "message": "报告生成完成"})
-
-                notes_count = len(relevant)
-
-            else:
-                # 需要爬虫
-                yield _sse_event("stage", {"stage": "crawl", "message": "知识库数据不足，正在从小红书实时抓取..."})
-                await asyncio.sleep(0)
-
-                crawler = CrawlerInterface(raw_dir=state.raw_dir)
-
-                # 如果爬虫存在但未登录，触发交互式登录流程（SSE 长连接可等待扫码）
-                if not crawler.is_available and crawler.needs_login:
-                    yield _sse_event("stage", {
-                        "stage": "login",
-                        "message": "需要登录小红书，正在打开浏览器窗口，请在浏览器中扫码登录..."
-                    })
-                    await asyncio.sleep(0)
-
-                    login_ok = await asyncio.to_thread(crawler.login, 5)
-                    if not login_ok:
-                        yield _sse_event("error", {
-                            "message": f"知识库无「{category}」数据，且登录失败或超时。"
-                        })
-                        return
-
-                    yield _sse_event("stage", {
-                        "stage": "login_ok",
-                        "message": "小红书登录成功，开始抓取数据..."
-                    })
-                    await asyncio.sleep(0)
-
-                if not crawler.is_available:
-                    yield _sse_event("error", {
-                        "message": f"知识库无「{category}」数据，且爬虫不可用。"
-                    })
-                    return
-
-                result = await asyncio.to_thread(crawler.crawl, category, CRAWL_COUNT)
-                crawled_count = result["count"]
-
-                if crawled_count == 0:
-                    yield _sse_event("error", {"message": f"无法从小红书获取「{category}」的数据"})
-                    return
-
-                yield _sse_event("stage", {
-                    "stage": "crawled",
-                    "message": f"已抓取 {crawled_count} 篇笔记",
-                    "crawled_count": crawled_count,
-                })
-                await asyncio.sleep(0)
-
-                await state.rebuild_indexes()
-                await asyncio.sleep(0.5)
-
-                # 重新检索
-                fresh_docs = await state.hybrid_retriever.ahybrid_search(
-                    category, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES
-                )
-                fresh_scores = await state.reranker.arerank(category, fresh_docs) if fresh_docs else []
-                fresh_relevant = [doc for doc, s in zip(fresh_docs, fresh_scores) if s >= RERANKER_THRESHOLD]
-
-                if not fresh_relevant:
-                    yield _sse_event("error", {
-                        "message": f"已抓取 {crawled_count} 篇但检索未匹配"
-                    })
-                    return
-
-                analyzer = CommentAnalyzer(raw_dir=state.raw_dir)
-                analyses = analyzer.analyze(fresh_relevant)
-                aggregator = DemandAggregator()
-                aggregated = aggregator.aggregate(analyses)
-                generator = InsightGenerator()
-
-                async for chunk in generator.astream(aggregated, category=category):
-                    if chunk:
-                        yield _sse_event("token", {"token": chunk})
-
-                notes_count = len(fresh_relevant)
-
-            # ── 阶段 5: 完成 ──
+            # ── 完成 ──
             elapsed = round(time.time() - t0, 2)
             yield _sse_event("done", {
                 "elapsed": elapsed,

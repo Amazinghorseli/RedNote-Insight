@@ -91,23 +91,6 @@ class Settings(BaseSettings):
         description="Redis 连接串（为空则跳过缓存/限流）",
     )
 
-    # ===== LangFuse 可观测性 =====
-    langfuse_public_key: str = Field(
-        default="",
-        alias="LANGFUSE_PUBLIC_KEY",
-        description="LangFuse Public Key",
-    )
-    langfuse_secret_key: str = Field(
-        default="",
-        alias="LANGFUSE_SECRET_KEY",
-        description="LangFuse Secret Key",
-    )
-    langfuse_host: str = Field(
-        default="https://cloud.langfuse.com",
-        alias="LANGFUSE_HOST",
-        description="LangFuse 服务地址",
-    )
-
     # ===== 限流配置 =====
     rate_limit_enabled: bool = Field(
         default=False,

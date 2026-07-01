@@ -1,26 +1,23 @@
-# 🎯 小红书爆款雷达 — AI 选品洞察引擎
+# 🎯 小红书爆款雷达 — AI 选品 + 选题引擎
 
 <p align="center">
-  <b>翻评论 · 找痛点 · 定方向 — 让 AI 从小红书评论区挖出下一个爆款</b>
+  <b>翻评论 · 找痛点 · 定方向 — 一个品类名，两套完整方案</b>
 </p>
 
 <p align="center">
-  <a href="#-快速开始"><img src="https://img.shields.io/badge/⚡_快速开始-3_分钟上手-blue?style=for-the-badge" alt="快速开始"></a>
+  <a href="#-快速开始"><img src="https://img.shields.io/badge/⚡_快速开始-2_分钟上手-blue?style=for-the-badge" alt="快速开始"></a>
   <a href="#-docker-部署"><img src="https://img.shields.io/badge/🐳_Docker_部署-一键启动-teal?style=for-the-badge" alt="Docker"></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/LangGraph-1.0-blue" alt="LangGraph">
   <img src="https://img.shields.io/badge/FastAPI-0.115+-teal" alt="FastAPI">
   <img src="https://img.shields.io/badge/ChromaDB-0.5+-yellow" alt="ChromaDB">
   <img src="https://img.shields.io/badge/PostgreSQL-16-blue" alt="PostgreSQL">
-  <img src="https://img.shields.io/badge/Redis-7-red" alt="Redis">
-  <img src="https://img.shields.io/badge/Docker-✓-blue" alt="Docker">
-  <img src="https://img.shields.io/badge/SSE-流式输出-orange" alt="SSE">
-  <img src="https://img.shields.io/badge/RAGAS-质量评估-green" alt="RAGAS">
+  <img src="https://img.shields.io/badge/SSE-流式双报告-orange" alt="SSE">
   <img src="https://img.shields.io/badge/BGE_M3-向量模型-orange" alt="BGE-M3">
-  <img src="https://img.shields.io/badge/DeepSeek_V4-大模型-purple" alt="DeepSeek">
+  <img src="https://img.shields.io/badge/DeepSeek_V3-大模型-purple" alt="DeepSeek">
   <img src="https://img.shields.io/badge/Python-3.11-blue" alt="Python">
+  <img src="https://img.shields.io/badge/灵感库-189条精选-green" alt="灵感库">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
 </p>
 
@@ -33,9 +30,7 @@
 - [✨ 核心特性](#-核心特性)
 - [⚡ 快速开始](#-快速开始)
 - [🐳 Docker 部署](#-docker-部署)
-- [📊 RAGAS 质量评估](#-ragas-质量评估)
 - [🔌 API 文档](#-api-文档)
-- [🔧 技术选型](#-技术选型)
 - [📁 项目结构](#-项目结构)
 - [🗺️ 路线图](#️-路线图)
 
@@ -43,181 +38,152 @@
 
 ## 🎯 它能做什么
 
-| 模式 | 你输入 | 它输出 |
-|------|--------|--------|
-| 📊 **选品洞察** | "健身服" | 结构化市场报告：用户痛点、利润空间、竞争格局、选品建议 |
-| 📊 **流式洞察** | "磁吸感应灯" | 逐阶段 + 逐字输出洞察报告，所见即所得 |
-| 💬 **智能问答** | "磁吸感应灯哪个品牌好？" | 基于真实笔记的品牌对比，列出优缺点 |
-| 💬 **流式问答** | 同上 | 逐 token 打字机效果输出答案 |
-| 📐 **质量评估** | 点击"运行评估" | RAGAS 四项指标：精度、召回率、忠实度、相关性 |
+输入一个品类名，**同时生成两套完整方案**：
+
+| 报告 | 受众 | 包含 |
+|------|------|------|
+| 📊 **选品报告** | 电商卖家 | 用户痛点、利润评估、竞争格局、三档定价、避坑提醒 |
+| 🎬 **选题方案** | 内容博主 | 3 个爆款选题 + 完整脚本大纲 + 封面方案 + 发布策略 |
+
+### 前端双按钮
+
+| 按钮 | 默认展示 | 适用场景 |
+|------|----------|----------|
+| 🔍 选品分析 | 选品报告 | 我要卖什么、怎么定价 |
+| 🎬 博主方案 | 选题方案 | 我要拍什么、脚本怎么写 |
+
+两份报告都生成完后自动弹出**一键复制导出条**——Markdown 格式，直接粘贴到飞书/Notion。
+
+### 💡 灵感库
+
+不知道搜什么？左侧栏「灵感库」提供 **9 个品类 × 21 条 = 189 条精选方向**。每条都标注了适用标签（🛒选品 / 🎬选题 / 🛒+🎬 双用），配一句话方向提示。点击直接搜，零等待。
 
 ### 报告示例
 
+搜「辣条」输出（即使 LLM 欠费，模板兜底照样出）：
+
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 电商选品洞察报告 — 磁吸感应灯
+📊 电商选品洞察报告 — 辣条
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-【市场概况】
-品类热度：高 | 分析笔记：42 篇 | 常青款占比：80%
-
 【利润空间评估】
-平均售价：¥89 | 成本：¥25 | 定价倍率：3.6x ✅
-预估利润率：72%
+平均售价：¥10-30 | 预估利润率：65% | 定价倍率：3x
 
 【用户痛点 TOP 5】
-1. 感应距离太短（34%）— "走近才亮，人都到跟前了"
-2. 电池续航不足（28%）— "三天两头充电"
-3. 粘贴不牢固（18%）— "用几天就掉下来"
-4. 充电口老旧（12%）— "还在用 Micro-USB"
-5. 亮度不足（8%）— "只能当夜灯用"
+1. 性价比问题（22%）— "比实体店贵一倍"
+2. 质量不稳定（18%）— "批次差异大，每次味道不一样"
+3. 包装简陋（15%）— "送礼拿不出手"
+4. 口味单一（12%）— "希望出创新风味"
+5. 售后缺失（10%）— "漏油不退货"
 
-【选品综合评分】
-┌─────────────────────┬──────┐
-│ 利润空间            │  85  │
-│ 物流友好            │  78  │
-│ 竞争强度            │  62  │
-│ 市场需求            │  90  │
-├─────────────────────┼──────┤
-│ 综合评分             │  79  │  ← A 级
-└─────────────────────┴──────┘
+【三档定价选品】
+💰 低价位 ¥9.9 → 麻辣素肉小包装，利润率 65%
+💰 中价位 ¥28  → 地域风味礼盒，利润率 71%
+💰 高价位 ¥68  → 国潮联名礼盒+花茶，利润率 74%
 
-💡 "磁吸+分离式"设计是最大空白——做这个方向，有机会。
+【选品综合评分】71/100
+一句话：用"地域风味+社交属性"破局巨头垄断。
 ```
 
 ---
 
 ## 🏗️ 系统架构
 
-```mermaid
-flowchart TB
-    subgraph 前端["🖥️ 前端"]
-        Web["Web 界面<br/>原生 JS + SSE 流式"]
-    end
-
-    subgraph 后端["⚡ FastAPI 后端"]
-        direction LR
-        API["REST 端点"]
-        Stream["SSE 流式端点"]
-        RateLimit["限流 (slowapi)"]
-        Middleware["中间件<br/>RequestID + CORS + 异常处理"]
-    end
-
-    subgraph 核心管道["🧠 AI 管道"]
-        direction TB
-        Supervisor["调度员<br/>策略路由"]
-        RAG["混合检索<br/>向量 + BM25 + RRF"]
-        Rerank["重排序<br/>BGE Reranker v2-M3"]
-        Graph["LangGraph<br/>自纠错循环"]
-        Agents["4 个分析 Agent<br/>评论→需求→洞察"]
-    end
-
-    subgraph 数据层["💾 数据层"]
-        Chroma["ChromaDB / PG<br/>向量库"]
-        Raw["127+ 篇<br/>Markdown 笔记"]
-        Redis["Redis<br/>缓存+限流"]
-    end
-
-    subgraph 运维["🔧 运维 & 可观测"]
-        Docker["Docker<br/>docker-compose"]
-        CI["GitHub Actions<br/>CI/CD"]
-        LangFuse["LangFuse<br/>Trace 监控"]
-        PromptYAML["Prompt YAML<br/>版本管理"]
-    end
-
-    Web --> API & Stream
-    API & Stream --> Middleware --> RateLimit
-    API --> Graph
-    Stream --> Graph
-    Graph --> Supervisor --> RAG --> Rerank --> Agents
-    Agents --> Graph
-    RAG --> Chroma --> Raw
-    Docker --> 后端 & 数据层
-    LangFuse -.-> 后端
-    PromptYAML -.-> 核心管道
+```
+┌──────────────────────────────────────────┐
+│  前端：原生 JS + SSE + 双 Tab + 灵感库     │
+│  双按钮（选品分析 / 博主方案）+ 一键导出    │
+├──────────────────────────────────────────┤
+│  API：FastAPI 全异步 + 11 路由 + 依赖注入  │
+├──────────────────────────────────────────┤
+│  Agent 管道：                              │
+│    混合检索 → 评论分析 → 需求聚合           │
+│    ├→ InsightGenerator  → 📊 选品报告      │
+│    └→ CreatorGenerator   → 🎬 选题方案      │
+├──────────────────────────────────────────┤
+│  数据：ChromaDB/PG + BM25 + 灵感库(189条)  │
+└──────────────────────────────────────────┘
 ```
 
-**数据流转：**
-```
-用户输入 → 混合检索（向量 + BM25 + RRF 融合）
-  → CrossEncoder 重排序（相关度 ≥ 0.1 才保留）
-  → 评论分析 Agent（提取投诉 + 购买意向）
-  → 需求聚合 Agent（聚类 + 打分）
-  → 选品洞察 Agent（LLM 生成报告 / 流式逐 token 输出）
-  → RAGAS 质量评估（量化指标）
-```
+**数据流：** 用户输入 → 混合检索（向量+BM25+RRF）→ CrossEncoder 重排序 → 评论分析 + 需求聚合 → 两个 Agent 并发生成 → SSE 流式双报告
 
 ---
 
 ## ✨ 核心特性
 
 ### 🔀 混合检索
-- **向量检索**（BGE-M3）：捕捉中文语义相似性
-- **BM25 关键词检索**（jieba 分词）：精确匹配品牌名、型号
-- **RRF 融合算法**：两种排序结果加权合并
-- **CrossEncoder 重排序**（BGE Reranker v2-M3）：比 LLM-as-Judge 快 10 倍
+- **BGE-M3 向量检索**：捕捉中文语义相似性
+- **BM25 + jieba**：精确匹配品牌名、型号
+- **RRF 融合**：两种排序加权合并
+- **CrossEncoder 重排序**：比 LLM-as-Judge 快 10 倍
 
-### 🤖 LangGraph 多 Agent 协作
+### 📊 双 Agent 管道
+同一份聚合数据，两个 Agent 并行输出：
+
 | Agent | 职责 |
 |-------|------|
-| **Supervisor（调度员）** | 自动分析问题特征，选择最佳检索策略 |
-| **Comment Analyzer（评论分析）** | 解析 YAML 格式的评论数据 |
-| **Demand Aggregator（需求聚合）** | 聚类痛点、计算热度评分 |
-| **Insight Generator（洞察生成）** | 生成结构化电商报告 + 流式输出 |
+| **InsightGenerator** | 选品报告：利润空间、用户痛点、三档定价、避坑提醒 |
+| **CreatorGenerator** | 选题方案：3 个爆款选题 + 脚本大纲 + 封面 + 发布策略 |
 
-### ⚡ SSE 流式输出
-- `/api/qa/stream`：逐 token 打字机效果
-- `/api/insight/stream`：逐阶段（检索→分析→聚合→生成）实时反馈
-- 前端 `EventSource` 原生消费，零依赖
+两个 Agent **共用一套检索→分析→聚合管道**，换个 prompt 就让数据产生双倍价值。
 
-### 📐 RAGAS 质量评估
-四项指标：上下文精度、召回率、忠实度、答案相关性
+### 🌊 SSE 流式双报告
+`/api/insight/stream` 一次请求同时推送两份报告：
 
-### 🔥 按需数据抓取
-知识库缺失时自动调用爬虫 → 增量入库 → 重新检索
+```
+SSE 事件流：
+  stage → token:selection（选品报告逐字推送）
+        → token:creator   （选题方案逐字推送）
+        → done            （导出条出现）
+```
+
+### 💡 灵感库（189 条精选）
+- 9 个品类 × 21 条 = 189 条人工精选方向
+- 每条标注 🛒选品 / 🎬选题 / 🛒+🎬 双用
+- 一句话方向提示，搜了就能出报告
+- 纯静态 Python dict，零延迟、零爬虫依赖
 
 ### 🛡️ 生产级基础设施
-- **Docker + docker-compose**：一键部署（API + PostgreSQL + Redis）
-- **GitHub Actions CI**：lint → test → build 自动化
+- **Docker + docker-compose**：API + PostgreSQL + Redis 一键部署
+- **GitHub Actions CI**：lint → test → build
+- **依赖注入**（FastAPI Depends）：全局状态管理 + 测试友好
 - **RequestID 中间件**：每个请求 UUID 追踪
 - **全局异常处理**：统一 JSON 错误格式
 - **限流保护**（slowapi）：可配置 QPS
-- **LangFuse 可观测性**：LLM 调用链 Trace
 - **Prompt YAML 管理**：版本控制 + 热重载
 
 ---
 
 ## 🧠 设计决策
 
-### 为什么用 LangGraph 而不是简单 RAG？
+### 为什么做双 Agent（选品 + 选题）？
 
-**我需要决策-执行分离架构。** 简单 RAG 是 retrieve → generate 线性流程，但真实场景需要：判断查什么（Supervisor）、查够了没（评分）、不够就重查（自纠错循环）、查到了再分步处理（多 Agent）。LangGraph 的条件边和循环正好实现这个模式——这和业界前沿的 DecEx-RAG 思想一致。
+传统 RAG 是"一个问题→一个答案"。但对同一个评论区数据，电商卖家和内容博主关心的是完全不同的事。**换个 prompt 就让同一份数据产生双倍价值**——这不是技术炫技，是业务驱动的架构选择。
 
-### 为什么混合检索（向量 + BM25 + RRF）？
+### 为什么混合检索？
 
 | 方案 | 擅长 | 不擅长 |
 |------|------|--------|
-| 纯向量检索 | 语义相似性（"求推荐便宜好用的收纳盒"） | 品牌名/型号精确匹配 |
-| 纯 BM25 | 关键词精确匹配（"磁吸感应灯 哪个品牌好"） | 语义泛化 |
+| 纯向量检索 | 语义相似（"求推荐便宜好用的收纳"） | 品牌名精确匹配 |
+| 纯 BM25 | 关键词精确（"磁吸感应灯"） | 语义泛化 |
 | RRF 融合 | 取两者长处 | — |
 
-实际效果：单独向量检索的 Top-5 准确率约 65%，加上 BM25 + RRF 后提升到 82%。最后再用 CrossEncoder 二次过滤，保证进入 LLM 的上下文质量。
+### 为什么 PG + ChromaDB 双模式？
 
-### 为什么全异步？
-
-RAG 一个请求要调 3-5 次 LLM（检索 → 评分 → 重写 → 生成），同步模式下每个请求串行等待，吞吐量极低。全异步后可以在等待 LLM 响应时处理其他请求。基准测试：异步化后并发 5 请求全部正常返回，无排队阻塞。
+开发期 ChromaDB 零配置启动快。生产期 PG+pgvector 提供持久化、事务和高并发。按环境自动切换——`DATABASE_URL` 存在就用 PG，否则回退 ChromaDB。
 
 ### 为什么 SSE 而不是 WebSocket？
 
-SSE 单向（服务器→客户端）已完全满足 RAG 流式场景。相比 WebSocket：零额外依赖、原生支持 `EventSource`、自动重连、HTTP/2 多路复用。不需要双向通信时，SSE 是更轻量的选择。
-
-### 为什么支持 PG + ChromaDB 双模式？
-
-开发期 ChromaDB 零配置启动快，生产期 PostgreSQL + pgvector 提供持久化、事务支持和高并发能力。通过适配器模式统一接口，按环境自动切换——`settings.database_url` 存在就用 PG，否则回退 ChromaDB。
+RAG 只需要服务端→客户端单向推送。SSE 原生支持自动重连、零依赖，完全够用。
 
 ### 为什么 Prompt 用 YAML 管理？
 
-硬编码 prompt 意味着改一行就要改代码 + 重新部署。YAML 文件 + PromptLoader 让 prompt 可版本控制、Git 可追踪、改 prompt 不需要重启。面试时能说出"Prompt 也应该有 CI"，说明你真正理解工程化。
+版本控制 + Git 可追踪 + 改 prompt 不重启服务。Prompt 也应该有 CI。
+
+### LLM 欠费了怎么办？
+
+每个 Agent 都有 `generate_fallback()` 兜底。规则引擎 + 数据模板照样出可用报告。AI 是锦上添花，工程要保证雪中送炭。
 
 ---
 
@@ -237,107 +203,60 @@ cd RedNote-Insight
 
 # 2. 配置 API Key
 cp .env.example .env
-# 编辑 .env 文件，填入你的 OPENAI_API_KEY
+# 编辑 .env，填入 OPENAI_API_KEY
 
-# 3. 安装依赖 + 生成演示数据 + 启动
+# 3. 启动
 uv sync
-uv run python generate_data.py
 uv run uvicorn src.api.main:app --reload --port 8000
 ```
 
-浏览器打开 **http://localhost:8000**。
+浏览器打开 **http://localhost:8000**
 
 ---
 
 ## 🐳 Docker 部署
 
 ```bash
-# 1. 配置环境变量
 cp .env.example .env
 vim .env  # 填入 OPENAI_API_KEY
 
-# 2. 一键启动（含 API + PostgreSQL + Redis）
 docker-compose up -d
-
-# 3. 查看日志
-docker-compose logs -f api
-
-# 4. 验证
 curl http://localhost:8000/api/health
-
-# 5. 停止
-docker-compose down
 ```
 
-**服务端口：**
-| 服务 | 端口 | 说明 |
-|------|:----:|------|
-| API | 8000 | FastAPI 应用 |
-| PostgreSQL | 5432 | 向量数据库 |
-| Redis | 6379 | 缓存/限流 |
-
----
-
-## 📊 RAGAS 质量评估
-
-```bash
-curl -X POST http://localhost:8000/api/evaluate \
-  -H "Content-Type: application/json" \
-  -d '{"categories": ["磁吸感应灯", "桌面收纳", "健身"]}'
-```
+| 服务 | 端口 |
+|------|:----:|
+| API | 8000 |
+| PostgreSQL | 5432 |
+| Redis | 6379 |
 
 ---
 
 ## 🔌 API 文档
 
-启动后访问：**http://localhost:8000/docs**（Swagger UI）
+启动后访问 **http://localhost:8000/docs**（Swagger UI）
 
 | 端点 | 方法 | 说明 |
 |------|:----:|------|
 | `/api/health` | GET | 健康检查 |
-| `/api/stats` | GET | 知识库统计 |
-| `/api/qa` | POST | 智能问答 |
-| `/api/qa/stream` | POST | 流式问答 (SSE) |
-| `/api/insight` | POST | 选品洞察 |
-| `/api/insight/stream` | POST | 流式洞察 (SSE) |
+| `/api/insight/stream` | POST | **SSE 流式双报告**（选品+选题） |
+| `/api/insight` | POST | 单次洞察报告 |
+| `/api/qa/stream` | POST | 流式问答 |
+| `/api/qa` | POST | 单次问答 |
+| `/api/opportunities` | GET | 品类机会排行 |
+| `/api/trending` | GET | 搜索热词 |
+| `/api/inspiration` | GET | 灵感库（支持 `?category=美妆`） |
+| `/api/inspiration/categories` | GET | 灵感库品类列表 |
 | `/api/crawl` | POST | 触发数据抓取 |
-| `/api/evaluate` | POST | RAGAS 评估 |
+| `/api/trending/refresh` | POST | 刷新热词 |
 
-### 流式端点示例
+### 流式双报告示例
 
 ```bash
-# QA 流式（逐 token 打字机效果）
-curl -N -X POST http://localhost:8000/api/qa/stream \
-  -H "Content-Type: application/json" \
-  -d '{"question":"磁吸感应灯哪个品牌好"}'
-
-# Insight 流式（逐阶段 + 逐 token）
 curl -N -X POST http://localhost:8000/api/insight/stream \
   -H "Content-Type: application/json" \
-  -d '{"category":"磁吸感应灯"}'
+  -d '{"category":"辣条"}'
 ```
-
----
-
-## 🔧 技术选型
-
-| 组件 | 选型 | 为什么 |
-|------|------|--------|
-| 🧠 **大模型** | DeepSeek-V4-Flash | 性价比最高，中文能力强 |
-| 🔤 **向量模型** | BAAI/bge-m3 | 多语言 SOTA |
-| 📏 **重排序** | BAAI/bge-reranker-v2-m3 | CrossEncoder 打分 |
-| 🗄️ **向量库** | ChromaDB / PG+pgvector | 支持嵌入式 + 生产级双模式 |
-| 🔗 **编排框架** | LangGraph | 多 Agent 编排 + 流式 |
-| 🔍 **关键词检索** | BM25 + jieba | 经典 IR 算法 |
-| 🖥️ **后端** | FastAPI | 异步 + 自动 API 文档 |
-| 🌊 **流式** | SSE (Server-Sent Events) | 原生支持，零依赖 |
-| 🎨 **前端** | 原生 JS + SSE | 零 npm 依赖 |
-| 📊 **评估** | RAGAS | 业界标准 |
-| 🐳 **部署** | Docker + docker-compose | 一键部署 |
-| 🔄 **CI** | GitHub Actions | lint → test → build |
-| 📈 **可观测** | structlog + LangFuse | 结构化日志 + LLM Trace |
-| 📝 **Prompt 管理** | YAML + PromptLoader | 版本控制 + 热重载 |
-| 🛡️ **限流** | slowapi | 可配置 QPS |
 
 ---
 
@@ -348,61 +267,59 @@ RedNote-Insight/
 ├── src/
 │   ├── api/
 │   │   ├── main.py              # FastAPI 应用组装 + 中间件
-│   │   ├── dependencies.py      # FastAPI Depends 依赖注入
+│   │   ├── dependencies.py      # 依赖注入
 │   │   └── routes/
-│   │       ├── health.py        # GET /api/health, /api/stats
-│   │       ├── qa.py            # POST /api/qa
-│   │       ├── qa_stream.py     # POST /api/qa/stream (SSE)
-│   │       ├── insight.py       # POST /api/insight
-│   │       ├── insight_stream.py # POST /api/insight/stream (SSE)
-│   │       ├── crawl.py         # POST /api/crawl
-│   │       └── evaluate.py      # POST /api/evaluate
+│   │       ├── health.py        # 健康检查
+│   │       ├── qa.py            # QA 问答
+│   │       ├── qa_stream.py     # QA 流式 (SSE)
+│   │       ├── insight.py       # 选品洞察
+│   │       ├── insight_stream.py # 双报告流式 (SSE) ★
+│   │       ├── crawl.py         # 爬虫管理
+│   │       ├── opportunities.py # 品类排行
+│   │       ├── trending.py      # 搜索热词
+│   │       └── inspiration.py   # 灵感库 API ★
 │   ├── core/
-│   │   ├── state.py             # AppState 依赖注入容器
-│   │   ├── observability.py     # LangFuse 集成
-│   │   ├── prompt_loader.py     # Prompt YAML 加载器
-│   │   └── __init__.py
+│   │   ├── state.py             # AppState 容器
+│   │   ├── prompt_loader.py     # Prompt 加载器
+│   │   ├── database.py          # PG 向量库适配
+│   │   └── query_utils.py       # 查询清洗
 │   ├── agents/
-│   │   ├── supervisor.py        # 策略路由
 │   │   ├── comment_agent.py     # 评论分析
 │   │   ├── demand_agent.py      # 需求聚合
-│   │   └── insight_agent.py     # 洞察生成
-│   ├── prompts/                 # 📝 Prompt YAML 文件
-│   │   ├── gen_answer_v1.yaml
-│   │   ├── rewrite_query_v1.yaml
-│   │   ├── supervisor_v1.yaml
-│   │   └── insight_report_v2.yaml
-│   ├── graph.py                 # LangGraph 图编排
-│   ├── retrievers.py            # 混合检索 + 重排序
-│   ├── ingestion.py             # 文档加载 + 向量库
-│   ├── evaluation.py            # RAGAS 评估
+│   │   ├── insight_agent.py     # 选品生成
+│   │   └── creator_agent.py     # ★ 选题生成
+│   ├── data/
+│   │   └── inspiration.py       # ★ 灵感库（189条）
+│   ├── prompts/                 # Prompt YAML
+│   │   ├── gen_answer_v2.yaml
+│   │   ├── rewrite_query_v2.yaml
+│   │   ├── insight_report_v2.yaml
+│   │   └── creator_report_v1.yaml  # ★ 选题 Prompt
+│   ├── retrievers.py            # 混合检索 + RRF + Reranker
+│   ├── ingestion.py             # 文档加载 + 向量化
 │   ├── crawler.py               # 爬虫接口
-│   ├── config.py                # pydantic-settings 配置
-│   └── logger.py                # structlog 日志
+│   ├── real_crawler.py          # DrissionPage 真浏览器爬虫
+│   ├── fetcher.py               # 搜索数据抓取
+│   ├── config.py                # 配置管理
+│   └── logger.py                # 结构化日志
 ├── static/
-│   ├── index.html
+│   ├── index.html               # 双 Tab 布局
 │   ├── css/style.css
-│   └── js/app.js                # SSE 流式前端
+│   └── js/app.js                # SSE 流式双报告消费 ★
 ├── tests/
-│   ├── test_demand_agent.py
-│   ├── test_api/                # API 集成测试
-│   │   ├── test_health.py
-│   │   ├── test_qa.py
-│   │   └── test_insight.py
-│   └── test_agents/             # Agent 单元测试
-│       ├── test_supervisor.py
-│       └── test_insight_agent.py
+│   ├── test_api/
+│   └── test_agents/
 ├── data/
 │   ├── raw/                     # 笔记原始数据
 │   └── chroma_db/               # 向量数据库
-├── Dockerfile                   # 多阶段构建
-├── docker-compose.yml           # API + PG + Redis
-├── .github/workflows/ci.yml     # CI/CD
-├── .env.example
-├── .dockerignore
+├── Dockerfile
+├── docker-compose.yml
+├── .github/workflows/ci.yml
 ├── pyproject.toml
 └── README.md
 ```
+
+> ★ 标记 = v2.0 新增功能
 
 ---
 
@@ -410,20 +327,14 @@ RedNote-Insight/
 
 | 阶段 | 内容 | 状态 |
 |------|------|:----:|
-| **Phase 1** | RAG 管道 + LangGraph 多 Agent + FastAPI + RAGAS | ✅ |
-| **Phase 2** | 真实小红书爬虫 + 异步全链路 + 依赖注入 | ✅ |
-| **Phase 3** | SSE 流式 + LangFuse + Prompt YAML + 限流 | ✅ |
-| **Phase 4** | PostgreSQL + pgvector 迁移 | 📋 |
-| **Phase 5** | 图片/视频内容分析 + 微信小程序 | 📋 |
+| RAG 管道 + FastAPI + 混合检索 | 核心引擎 | ✅ |
+| 真实爬虫 + 全异步 + 依赖注入 | 数据基础 | ✅ |
+| SSE 流式双报告 + 灵感库 + 双按钮前端 | v2.0 核心 | ✅ |
+| PG+pgvector 生产部署 | 规模升级 | 📋 |
+| 图片视频内容分析 + 小程序 | 生态扩展 | 📋 |
 
 ---
 
 ## 📄 开源协议
 
-MIT © 2026 — 个人学习、商业用途均自由使用。
-
----
-
-<p align="center">
-  <sub>为 AI 应用开发者而建。如果对你有帮助，给个 ⭐ Star</sub>
-</p>
+MIT © 2026

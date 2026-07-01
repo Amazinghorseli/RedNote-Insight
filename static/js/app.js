@@ -10,6 +10,9 @@ const state = {
     isSearching: false,       // 防重复请求
     activeSSE: null,          // 当前 SSE 读取器（用于取消）
     activeLoadingTag: null,   // 当前 loading 的热词/快搜标签
+    mode: 'selection',        // 'selection' = 选品 | 'creator' = 选题
+    selectionDone: false,     // 选品报告是否完成
+    creatorDone: false,       // 选题方案是否完成
 };
 
 // ===== DOM 引用 =====
@@ -19,6 +22,7 @@ const $$ = (s) => document.querySelectorAll(s);
 const rankingList = $('#ranking-list');
 const categoryInput = $('#category-input');
 const searchBtn = $('#search-btn');
+const agentBtn = $('#agent-btn');
 const quickTags = $('#quick-tags');
 const loadingEl = $('#loading-indicator');
 const detailOverlay = $('#detail-overlay');
@@ -52,12 +56,14 @@ function lockSearch() {
     state.isSearching = true;
     searchBtn.classList.add('loading');
     searchBtn.disabled = true;
+    if (agentBtn) { agentBtn.classList.add('loading'); agentBtn.disabled = true; }
 }
 
 function unlockSearch() {
     state.isSearching = false;
     searchBtn.classList.remove('loading');
     searchBtn.disabled = false;
+    if (agentBtn) { agentBtn.classList.remove('loading'); agentBtn.disabled = false; }
     // 同时还原 loading 的标签
     if (state.activeLoadingTag) {
         state.activeLoadingTag.classList.remove('loading');
@@ -115,13 +121,40 @@ function tagChips(tags) {
     return tags.map(function (t) { return '<span class="tag-chip">' + t + '</span>'; }).join('');
 }
 
-// 复制报告到剪贴板
-function copyReport() {
-    var reportEl = document.getElementById('stream-report');
+// 复制单报告到剪贴板
+function copyReport(panelId) {
+    var reportEl = document.getElementById(panelId || 'report-selection');
     var text = reportEl ? reportEl.textContent : '';
     if (!text.trim()) { showToast('没有可复制的内容', 'warning'); return; }
     navigator.clipboard.writeText(text).then(function () {
         showToast('报告已复制到剪贴板', 'success');
+    }).catch(function () {
+        showToast('复制失败，请手动选中复制', 'error');
+    });
+}
+
+// 一键复制全部（选品 + 选题，Markdown 格式）
+function copyAllReports() {
+    var selEl = document.getElementById('report-selection');
+    var crEl = document.getElementById('report-creator');
+    var selText = (selEl && selEl.textContent.trim()) ? selEl.textContent.trim() : '';
+    var crText = (crEl && crEl.textContent.trim()) ? crEl.textContent.trim() : '';
+
+    if (!selText && !crText) {
+        showToast('两份报告都还没生成完，请稍候', 'warning');
+        return;
+    }
+
+    var combined = '';
+    if (selText) {
+        combined += '# 📊 选品报告\n\n' + selText + '\n\n---\n\n';
+    }
+    if (crText) {
+        combined += '# 🎬 选题方案\n\n' + crText;
+    }
+
+    navigator.clipboard.writeText(combined).then(function () {
+        showToast('✅ 两份方案已一键复制！直接粘贴到备忘录/飞书/Notion 即可', 'success');
     }).catch(function () {
         showToast('复制失败，请手动选中复制', 'error');
     });
@@ -163,26 +196,71 @@ async function triggerCrawl(category) {
     return await resp.json();
 }
 
-// ===== SSE 流式洞察（核心改造）=====
-function streamInsight(category) {
+// ===== SSE 流式洞察（双报告：选品 + 选题）=====
+// defaultTab: 'selection' | 'creator' — 默认展示哪个 Tab
+function streamInsight(category, defaultTab) {
     cancelActiveSSE();
+    if (!defaultTab) defaultTab = 'selection';
 
-    // 打开详情弹出层 + 显示加载布局
+    state.selectionDone = false;
+    state.creatorDone = false;
+
+    // 打开详情弹出层 + 双 Tab 布局
     detailOverlay.style.display = 'flex';
     detailOverlay.scrollTop = 0;
+    var selActive = defaultTab === 'selection' ? ' active' : '';
+    var crActive = defaultTab === 'creator' ? ' active' : '';
+    var selPanelDisplay = defaultTab === 'selection' ? 'block' : 'none';
+    var crPanelDisplay = defaultTab === 'creator' ? 'block' : 'none';
+
     detailContent.innerHTML =
+        '<div class="export-bar" id="export-bar" style="display:none;">' +
+        '<span class="export-hint">⬇️ 两份报告已就绪</span>' +
+        '<button class="btn-export" onclick="copyAllReports()">📋 一键复制全部</button>' +
+        '<button class="btn-export btn-export-alt" onclick="copyReport(\'report-selection\')">📊 仅复制选品</button>' +
+        '<button class="btn-export btn-export-alt" onclick="copyReport(\'report-creator\')">🎬 仅复制选题</button>' +
+        '</div>' +
         '<div class="detail-header">' +
         '<h2>' + category + '</h2>' +
-        '<span class="rec-badge rec-try">⏳ 分析中</span>' +
+        '<span class="rec-badge rec-try" id="detail-status">⏳ 分析中</span>' +
         '</div>' +
         '<div id="stage-list" class="stage-list" style="margin-bottom:16px;"></div>' +
-        '<div id="stream-report" class="insight-report" style="min-height:80px;color:#888;">正在连接...</div>';
+        '<div class="detail-tabs">' +
+        '<button class="detail-tab' + selActive + '" data-tab="selection" id="tab-selection">📊 选品报告</button>' +
+        '<button class="detail-tab' + crActive + '" data-tab="creator" id="tab-creator">🎬 选题方案</button>' +
+        '</div>' +
+        '<div class="detail-tab-content' + selActive + '" id="panel-selection" style="display:' + selPanelDisplay + ';">' +
+        '<div id="report-selection" class="insight-report" style="min-height:80px;color:#888;">等待生成...</div>' +
+        '</div>' +
+        '<div class="detail-tab-content' + crActive + '" id="panel-creator" style="display:' + crPanelDisplay + ';">' +
+        '<div id="report-creator" class="insight-report" style="min-height:80px;color:#888;">等待生成...</div>' +
+        '</div>';
+
+    // Tab 切换事件
+    document.querySelectorAll('.detail-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            document.querySelectorAll('.detail-tab').forEach(function (t) { t.classList.remove('active'); });
+            document.querySelectorAll('.detail-tab-content').forEach(function (p) { p.style.display = 'none'; });
+            tab.classList.add('active');
+            document.getElementById('panel-' + tab.dataset.tab).style.display = 'block';
+        });
+    });
 
     var stageList = document.getElementById('stage-list');
-    var reportEl = document.getElementById('stream-report');
+    var selectionEl = document.getElementById('report-selection');
+    var creatorEl = document.getElementById('report-creator');
+    var exportBar = document.getElementById('export-bar');
     var stages = {};
-    var fullReport = '';
+    var selectionReport = '';
+    var creatorReport = '';
     var noteCount = 0;
+
+    function tryShowExport() {
+        // 两份报告都就绪时显示导出条
+        if (state.selectionDone && state.creatorDone) {
+            exportBar.style.display = 'flex';
+        }
+    }
 
     function addStage(stageId, message) {
         if (stages[stageId]) return;
@@ -205,51 +283,59 @@ function streamInsight(category) {
 
             if (type === 'stage') {
                 addStage(payload.stage, payload.message);
-                // 标记已完成阶段（stages ending with "ed" or "done_generate"）
-                if (/ed$/.test(payload.stage) || payload.stage === 'done_generate') {
+                if (/ed$/.test(payload.stage) || payload.stage === 'selection_done' || payload.stage === 'creator_done') {
                     completeStage(payload.stage);
                 }
-                // 爬虫阶段特殊提示
-                if (payload.stage === 'crawl') {
-                    showToast('知识库数据不足，正在从小红书实时抓取，预计 30-60 秒...', 'warning');
+                if (payload.stage === 'crawl') showToast('正在从小红书实时抓取，预计 30-60 秒...', 'warning');
+                if (payload.stage === 'login') showToast('请在浏览器扫码登录小红书...', 'warning');
+                if (payload.stage === 'selection_done') {
+                    selectionEl.style.color = '#333';
+                    document.getElementById('tab-selection').textContent = '📊 选品报告 ✓';
+                    state.selectionDone = true;
+                    tryShowExport();
                 }
-                if (payload.stage === 'login') {
-                    showToast('请在浏览器扫码登录小红书...', 'warning');
+                if (payload.stage === 'creator_done') {
+                    creatorEl.style.color = '#333';
+                    document.getElementById('tab-creator').textContent = '🎬 选题方案 ✓';
+                    state.creatorDone = true;
+                    tryShowExport();
                 }
-            } else if (type === 'token') {
-                fullReport += payload.token;
-                reportEl.textContent = fullReport;
-                // 自动跟滚到底部
-                reportEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+
+            } else if (type === 'token:selection') {
+                selectionReport += payload.token;
+                selectionEl.textContent = selectionReport;
+                selectionEl.style.color = '#555';
+
+            } else if (type === 'token:creator') {
+                creatorReport += payload.token;
+                creatorEl.textContent = creatorReport;
+                creatorEl.style.color = '#555';
+
             } else if (type === 'done') {
                 noteCount = payload.note_count || 0;
-                reportEl.style.color = '#333';
+                document.getElementById('detail-status').textContent = '✅ 完成';
+                document.getElementById('detail-status').className = 'rec-badge rec-strong';
+                // done 事件也可能触发导出条
+                state.selectionDone = true;
+                state.creatorDone = true;
+                tryShowExport();
                 onStreamDone();
+
             } else if (type === 'error') {
-                reportEl.textContent = fullReport || payload.message;
-                reportEl.style.color = '#cc2222';
-                showToast(payload.message, 'error');
+                var msg = payload.message || '未知错误';
+                if (!selectionReport) selectionEl.textContent = msg;
+                if (!creatorReport) creatorEl.textContent = msg;
+                showToast(msg, 'error');
                 onStreamDone();
             }
-        } catch (e) {
-            // 非 JSON 的 SSE 行，忽略
-        }
+        } catch (e) { /* 非 JSON SSE 行 */ }
     }
 
     function onStreamDone() {
         state.activeSSE = null;
-        // 尝试用 REST API 补充结构化指标
-        fetchCategoryDetail(category).then(function (data) {
-            if (data && data.scores) {
-                renderDetail(data, fullReport);
-            } else {
-                _renderStreamOnly(category, fullReport, noteCount);
-            }
-        }).catch(function () {
-            _renderStreamOnly(category, fullReport, noteCount);
-        }).finally(function () {
-            unlockSearch();
-        });
+        if (!selectionReport) selectionEl.textContent = '报告生成中...';
+        if (!creatorReport) creatorEl.textContent = '报告生成中...';
+        unlockSearch();
     }
 
     // 发起 fetch + ReadableStream
@@ -265,7 +351,6 @@ function streamInsight(category) {
         var buffer = '';
         var cancelled = false;
 
-        // 创建可取消的包装
         state.activeSSE = {
             cancel: function () {
                 cancelled = true;
@@ -276,13 +361,7 @@ function streamInsight(category) {
         function readStream() {
             reader.read().then(function (result) {
                 if (cancelled) return;
-                if (result.done) {
-                    if (reportEl.textContent === '正在连接...') {
-                        reportEl.textContent = '';
-                    }
-                    onStreamDone();
-                    return;
-                }
+                if (result.done) { onStreamDone(); return; }
 
                 buffer += decoder.decode(result.value, { stream: true });
                 var parts = buffer.split('\n\n');
@@ -291,73 +370,40 @@ function streamInsight(category) {
                 for (var i = 0; i < parts.length; i++) {
                     var part = parts[i].trim();
                     if (!part) continue;
-
                     var lines = part.split('\n');
-                    var evType = '';
-                    var evData = '';
-
+                    var evType = '', evData = '';
                     for (var j = 0; j < lines.length; j++) {
                         var line = lines[j];
-                        if (line.indexOf('event: ') === 0) {
-                            evType = line.slice(7).trim();
-                        } else if (line.indexOf('data: ') === 0) {
-                            evData = line.slice(6).trim();
-                        } else if (line.indexOf('data:') === 0) {
-                            evData = line.slice(5).trim();
-                        }
+                        if (line.indexOf('event: ') === 0) evType = line.slice(7).trim();
+                        else if (line.indexOf('data: ') === 0) evData = line.slice(6).trim();
+                        else if (line.indexOf('data:') === 0) evData = line.slice(5).trim();
                     }
-
-                    if (evData) {
-                        handleSSEEvent(evType || 'stage', evData);
-                    }
+                    if (evData) handleSSEEvent(evType || 'stage', evData);
                     if (evData && evType === 'done') break;
                 }
-
                 readStream();
             }).catch(function (err) {
                 if (cancelled) return;
-                console.error('SSE read error:', err);
                 showToast('连接中断: ' + err.message, 'error');
                 unlockSearch();
             });
         }
-
         readStream();
     }).catch(function (err) {
-        console.error('SSE fetch error:', err);
-        reportEl.textContent = '无法连接到服务';
-        reportEl.style.color = '#cc2222';
         showToast('服务连接失败: ' + err.message, 'error');
         unlockSearch();
     });
 }
 
-function _renderStreamOnly(category, report, noteCount) {
-    detailContent.innerHTML =
-        '<div class="detail-header">' +
-        '<h2>' + category + '</h2>' +
-        '<div style="display:flex;gap:8px;align-items:center;">' +
-        '<span class="rec-badge rec-try">📊 实时报告</span>' +
-        '<button class="btn-primary btn-small" onclick="copyReport()" style="font-size:12px;">📋 复制报告</button>' +
-        '</div>' +
-        '</div>' +
-        '<div class="result-container" style="margin-bottom:16px;">' +
-        '<div id="stream-report" class="insight-report">' + (report || '报告生成中...') + '</div>' +
-        '</div>' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-        '<span style="font-size:13px;color:var(--text-secondary);">分析笔记：' + (noteCount || '—') + ' 篇</span>' +
-        '</div>';
-}
-
 // ===== 搜索入口（带防重复）=====
-function showCategoryDetail(catName) {
+function showCategoryDetail(catName, defaultTab) {
     if (state.isSearching) {
         showToast('请求处理中，请稍候...', 'warning');
         return;
     }
     lockSearch();
     state.activeCategory = catName;
-    streamInsight(catName);
+    streamInsight(catName, defaultTab || 'selection');
 }
 
 // ===== 渲染函数 =====
@@ -466,7 +512,7 @@ function renderDetail(data, streamedReport) {
         '<div class="detail-scores">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
         '<h3 style="margin:0;">📝 AI 洞察报告</h3>' +
-        '<button class="btn-primary btn-small" onclick="copyReport()" style="font-size:12px;">📋 复制报告</button>' +
+        '<button class="btn-primary btn-small" onclick="copyReport(\'stream-report\')" style="font-size:12px;">📋 复制报告</button>' +
         '</div>' +
         '<div id="stream-report" class="insight-report">' + streamedReport + '</div>' +
         '</div>' : '';
@@ -532,7 +578,120 @@ function renderDetail(data, streamedReport) {
     detailOverlay.scrollTop = 0;
 }
 
-// ===== 爬虫触发（增强 UX）=====
+// ===== 侧边栏Tab切换 =====
+function switchSidebarTab(tabId) {
+    document.querySelectorAll('.nav-tab').forEach(function (t) {
+        t.classList.toggle('active', t.dataset.tab === tabId);
+    });
+    document.querySelectorAll('.tab-content').forEach(function (c) {
+        c.classList.toggle('active', c.id === 'tab-' + tabId);
+    });
+}
+
+// ===== 热榜渲染 =====
+function renderHotList(items) {
+    var board = document.getElementById('hotlist-board');
+    if (!items || items.length === 0) {
+        board.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>暂无热榜数据</p></div>';
+        return;
+    }
+
+    // 提取品类列表
+    var cats = ['全部'];
+    items.forEach(function (item) {
+        if (cats.indexOf(item.category) === -1) cats.push(item.category);
+    });
+    var filtersEl = document.getElementById('hotlist-filters');
+    filtersEl.innerHTML = cats.map(function (c) {
+        var active = c === '全部' ? ' active' : '';
+        return '<span class="hotlist-filter' + active + '" data-cat="' + c + '">' + c + '</span>';
+    }).join('');
+
+    // 品类筛选点击
+    filtersEl.querySelectorAll('.hotlist-filter').forEach(function (el) {
+        el.addEventListener('click', function () {
+            filtersEl.querySelectorAll('.hotlist-filter').forEach(function (f) { f.classList.remove('active'); });
+            el.classList.add('active');
+            renderHotListItems(items, el.dataset.cat);
+        });
+    });
+
+    renderHotListItems(items, '全部');
+}
+
+function renderHotListItems(items, filterCat) {
+    var board = document.getElementById('hotlist-board');
+    var filtered = filterCat === '全部' ? items : items.filter(function (i) { return i.category === filterCat; });
+
+    if (filtered.length === 0) {
+        board.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>该分类暂无灵感</p></div>';
+        return;
+    }
+
+    var typeLabel = { both: '🛒+🎬', selection: '🛒', topic: '🎬' };
+
+    var html = '';
+    filtered.forEach(function (item, idx) {
+        var rank = idx + 1;
+        var medal = '';
+        if (rank === 1) medal = '🥇';
+        else if (rank === 2) medal = '🥈';
+        else if (rank === 3) medal = '🥉';
+
+        var tag = typeLabel[item.type] || '🎬';
+        var tagClass = item.type === 'both' ? 'insp-tag-both' : (item.type === 'selection' ? 'insp-tag-sel' : 'insp-tag-topic');
+
+        html +=
+            '<div class="hotlist-item" data-keyword="' + item.keyword + '" tabindex="0" role="button">' +
+            '<div class="hotlist-rank">' + (medal || '<span class="rank-num">' + rank + '</span>') + '</div>' +
+            '<div class="hotlist-body">' +
+            '<div class="hotlist-top">' +
+            '<span class="hotlist-keyword">' + item.keyword + '</span>' +
+            '<span class="insp-tag ' + tagClass + '">' + tag + '</span>' +
+            '<span class="hotlist-cat-tag">' + item.category + '</span>' +
+            '</div>' +
+            '<div class="hotlist-tip">💡 ' + (item.tip || '') + '</div>' +
+            '</div>' +
+            '<div class="hotlist-arrow">›</div>' +
+            '</div>';
+    });
+
+    board.innerHTML = html;
+
+    board.querySelectorAll('.hotlist-item').forEach(function (el) {
+        el.addEventListener('click', function () {
+            var keyword = el.dataset.keyword;
+            if (keyword) {
+                categoryInput.value = keyword;
+                switchSidebarTab('discover');
+                showCategoryDetail(keyword, 'selection');
+            }
+        });
+    });
+}
+
+async function loadHotList(category) {
+    var loadingEl = document.getElementById('hotlist-loading');
+    var board = document.getElementById('hotlist-board');
+    loadingEl.style.display = 'flex';
+
+    try {
+        var url = '/api/inspiration';
+        if (category) url += '?category=' + encodeURIComponent(category);
+        var resp = await fetch(url);
+        var data = await resp.json();
+        renderHotList(data.items || []);
+        var catLabel = data.category || '全部';
+        document.getElementById('hotlist-date').textContent =
+            new Date().toLocaleDateString('zh-CN', {
+                year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
+            }) + ' · ' + catLabel + '灵感';
+    } catch (err) {
+        board.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>加载失败：' + err.message + '</p></div>';
+    } finally {
+        loadingEl.style.display = 'none';
+    }
+}
 
 window.doCrawl = async function (category) {
     var triggerBtns = document.querySelectorAll('.crawl-banner .btn-small');
@@ -573,7 +732,7 @@ rankingList.addEventListener('click', function (e) {
     while (target && target !== rankingList) {
         if (target.classList.contains('ranking-item')) {
             var cat = target.dataset.category;
-            if (cat) showCategoryDetail(cat);
+            if (cat) showCategoryDetail(cat, 'selection');
             return;
         }
         target = target.parentElement;
@@ -583,7 +742,7 @@ rankingList.addEventListener('click', function (e) {
 // ===== 搜索处理（防抖 + 去重）=====
 
 var searchTimeout = null;
-function handleSearch(query) {
+function handleSearch(query, defaultTab) {
     var trimmed = query.trim();
     if (!trimmed) return;
 
@@ -594,7 +753,7 @@ function handleSearch(query) {
 
     if (searchTimeout) clearTimeout(searchTimeout);
     searchTimeout = setTimeout(function () {
-        showCategoryDetail(trimmed);
+        showCategoryDetail(trimmed, defaultTab || 'selection');
     }, 200);
 }
 
@@ -626,7 +785,7 @@ function renderTrendingTags(items) {
             }
             setTagLoading(tag);
             categoryInput.value = item.keyword;
-            showCategoryDetail(item.keyword);
+            showCategoryDetail(item.keyword, 'selection');
         });
         container.appendChild(tag);
     });
@@ -684,7 +843,7 @@ async function init() {
                 return;
             }
             setTagLoading(tag);
-            showCategoryDetail(c);
+            showCategoryDetail(c, 'selection');
         });
         quickTags.appendChild(tag);
     });
@@ -700,12 +859,75 @@ async function init() {
 
     // 搜索事件
     searchBtn.addEventListener('click', function () {
-        handleSearch(categoryInput.value);
+        handleSearch(categoryInput.value, 'selection');
     });
 
     categoryInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') handleSearch(categoryInput.value);
+        if (e.key === 'Enter') handleSearch(categoryInput.value, 'selection');
     });
+
+    // 博主方案按钮
+    if (agentBtn) {
+        agentBtn.addEventListener('click', function () {
+            var query = categoryInput.value.trim();
+            if (!query) { showToast('请输入品类名', 'warning'); return; }
+            if (state.isSearching) { showToast('请求处理中，请稍候...', 'warning'); return; }
+            if (searchTimeout) clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(function () {
+                showCategoryDetail(query, 'creator');
+            }, 200);
+        });
+    }
+
+    // 侧边栏 Tab 切换
+    document.querySelectorAll('.nav-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            var tabId = this.dataset.tab;
+            switchSidebarTab(tabId);
+            // 切到热榜且数据还没加载时自动加载
+            if (tabId === 'hotlist') {
+                var board = document.getElementById('hotlist-board');
+                var firstChild = board.querySelector('.empty-state');
+                if (firstChild && firstChild.textContent.indexOf('正在加载') !== -1) {
+                    loadHotList();
+                }
+            }
+        });
+    });
+
+    // 热榜刷新按钮
+    var refreshHotBtn = document.getElementById('refresh-hotlist-btn');
+    if (refreshHotBtn) {
+        refreshHotBtn.addEventListener('click', async function () {
+            this.disabled = true;
+            this.textContent = '加载中...';
+            try {
+                await loadHotList();
+                showToast('灵感库已加载', 'success');
+            } catch (e) {
+                showToast('加载失败', 'error');
+            }
+            if (refreshHotBtn) { refreshHotBtn.disabled = false; refreshHotBtn.textContent = '🔄 刷新品类'; }
+        });
+    }
+
+    // 模式切换
+    var modeToggle = document.getElementById('mode-toggle');
+    if (modeToggle) {
+        modeToggle.addEventListener('click', function () {
+            state.mode = state.mode === 'selection' ? 'creator' : 'selection';
+            var isCreator = state.mode === 'creator';
+            modeToggle.innerHTML = isCreator ? '🎬 选题' : '📊 选品';
+            modeToggle.style.background = isCreator ? 'var(--accent-purple, #7c3aed)' : 'var(--bg-secondary, #f0f0f0)';
+            modeToggle.style.color = isCreator ? '#fff' : 'var(--text-primary, #333)';
+            document.getElementById('hero-title').textContent = isCreator ? '🎬 今天拍什么？' : '🔍 今天该卖什么？';
+            document.getElementById('hero-desc').textContent = isCreator
+                ? '不是不知道拍什么——评论区早告诉你答案了。输入品类名，我给你选题+脚本大纲。'
+                : '不知道卖什么？看看小红书现在什么在火。输入品类名查详情，或直接浏览下方机会排行。';
+            searchBtn.textContent = isCreator ? '🎬 找选题' : '🔍 查详情';
+            categoryInput.placeholder = isCreator ? '输入品类名，例如：磁吸感应灯' : '输入品类名，例如：磁吸感应灯';
+        });
+    }
 }
 
 // ===== 关闭详情 =====

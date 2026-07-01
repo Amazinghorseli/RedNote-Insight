@@ -36,7 +36,6 @@ class AppState:
     bm25: any = None
     hybrid_retriever: any = None
     bm25_search: Optional[Callable] = None
-    graph: any = None
     reranker: any = None
 
     # --- 路径 ---
@@ -84,7 +83,6 @@ class AppState:
         async with self._lock:
             from src.ingestion import incremental_ingest, rebuild_all_chunks
             from src.retrievers import HybridRetriever, PgHybridRetriever
-            from src.graph import build_async_graph
             from rank_bm25 import BM25Okapi
             import jieba
 
@@ -116,7 +114,6 @@ class AppState:
             self.bm25 = bm25
             self.hybrid_retriever = hr
             self.bm25_search = bms
-            self.graph = build_async_graph(self.vectorstore, bms, hr, reranker=self.reranker)
             self._refresh_stats()
             logger.info(f"[AppState] 索引重建完成 — {len(chunks)} chunks (pg={self._use_pg})")
 
@@ -124,7 +121,6 @@ class AppState:
         """实际初始化逻辑：优先 PG，回退 ChromaDB"""
         from src.ingestion import rebuild_all_chunks, load_vectorstore
         from src.retrievers import HybridRetriever, APIReranker, create_pg_vectorstore, PgHybridRetriever
-        from src.graph import build_async_graph
         from rank_bm25 import BM25Okapi
         import jieba
 
@@ -200,7 +196,6 @@ class AppState:
         self.bm25 = bm25
         self.hybrid_retriever = hr
         self.bm25_search = bm25_search
-        self.graph = build_async_graph(vectorstore, bm25_search, hr, reranker=self.reranker)
         self._refresh_stats()
 
     def _refresh_stats(self) -> None:

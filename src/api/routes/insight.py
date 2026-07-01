@@ -12,12 +12,14 @@ router = APIRouter(tags=["insight"])
 
 class InsightRequest(BaseModel):
     category: str
+    mode: str = "selection"  # "selection" = 选品报告 | "creator" = 选题方案
 
 
 class InsightResponse(BaseModel):
     success: bool
     category: str
     report: str
+    mode: str = "selection"
     notes_count: int
     generated_count: int = 0
     elapsed: float
@@ -26,20 +28,21 @@ class InsightResponse(BaseModel):
 @router.post("/api/insight", response_model=InsightResponse)
 async def run_insight(req: InsightRequest, state: AppState = Depends(get_app_state)):
     t0 = time.time()
-    result = await _run_insight_async(req.category, state)
+    result = await _run_insight_async(req.category, state, mode=req.mode)
     elapsed = round(time.time() - t0, 2)
     return InsightResponse(
-        success=True, category=req.category,
+        success=True, category=req.category, mode=req.mode,
         report=result["report"], notes_count=result["notes_count"],
         generated_count=result["generated_count"], elapsed=elapsed,
     )
 
 
-async def _run_insight_async(query: str, state: AppState) -> dict:
+async def _run_insight_async(query: str, state: AppState, mode: str = "selection") -> dict:
     """执行洞察管道（全异步）"""
     from src.agents.comment_agent import CommentAnalyzer
     from src.agents.demand_agent import DemandAggregator
     from src.agents.insight_agent import InsightGenerator
+    from src.agents.creator_agent import CreatorGenerator
     from src.config import RERANKER_THRESHOLD
     from src.crawler import CrawlerInterface
 
@@ -53,11 +56,14 @@ async def _run_insight_async(query: str, state: AppState) -> dict:
             return "没有找到评论分析数据。"
         aggregator = DemandAggregator()
         aggregated = aggregator.aggregate(analyses)
-        generator = InsightGenerator()
+        if mode == "creator":
+            gen = CreatorGenerator()
+        else:
+            gen = InsightGenerator()
         try:
-            report = await generator.agenerate(aggregated, category=category)
+            report = await gen.agenerate(aggregated, category=category)
         except Exception as e:
-            report = generator.generate_fallback(aggregated, category=category)
+            report = gen.generate_fallback(aggregated, category=category)
             report += f"\n\n（注：LLM 生成失败，使用模板兜底。错误：{e}）"
         return report
 
