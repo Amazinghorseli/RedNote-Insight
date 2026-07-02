@@ -1,2 +1,0 @@
-# No system packages needed for core features (insight + QA)
-# Crawler (DrissionPage) only works locally

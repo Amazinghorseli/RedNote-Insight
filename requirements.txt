@@ -4,7 +4,6 @@ langchain-openai>=0.2
 langchain-chroma>=0.2
 langchain-text-splitters>=0.3
 chromadb>=0.5
-torchvision>=0.18
 rank-bm25>=0.2
 jieba>=0.42
 python-dotenv>=1.0
