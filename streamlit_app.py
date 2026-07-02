@@ -1,8 +1,7 @@
 """
-streamlit_app.py — Streamlit Cloud 部署入口
-============================================
-独立版 Streamlit 界面，适配 Streamlit Cloud 部署环境。
-初始化过程显示进度，避免白屏等待。
+streamlit_app.py — Streamlit Cloud 部署入口 (v2.0)
+====================================================
+适配 v2.0 重构架构，使用 AppState 统一状态管理。
 """
 import streamlit as st
 import sys
@@ -10,160 +9,78 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# ============================================================
-# 必须先显示页面，再初始化（避免白屏）
-# ============================================================
 st.set_page_config(page_title="小红书爆款雷达", page_icon="🎯", layout="wide")
 st.title("🎯 小红书爆款雷达")
 st.caption("翻评论 · 找痛点 · 定方向 — AI 选品洞察引擎")
 
 # ============================================================
-# 初始化（带进度提示）
+# 初始化 AppState（v2.0 统一状态管理，同步初始化）
 # ============================================================
 @st.cache_resource(show_spinner=False)
-def init_app():
-    """初始化向量库和 LangGraph，缓存结果避免重复调用"""
-    status = st.empty()
-    progress = st.empty()
-
-    try:
-        from src.ingestion import load_raw_documents, chunk_documents, build_vectorstore, rebuild_all_chunks
-        from src.retrievers import HybridRetriever, APIReranker
-        from src.graph import build_graph
-        from rank_bm25 import BM25Okapi
-        import jieba
-
-        project_root = os.path.dirname(os.path.abspath(__file__))
-        raw_dir = os.path.join(project_root, "data", "raw")
-        chroma_dir = os.path.join(project_root, "data", "chroma_db")
-
-        # Step 1: 加载文档
-        status.info("📂 正在加载笔记文档...")
-        try:
-            from src.ingestion import load_vectorstore
-            vectorstore = load_vectorstore()
-            status.success("✅ 向量库已加载")
-        except Exception:
-            status.info("🔨 正在构建向量库（首次部署需要 1-2 分钟）...")
-            docs = load_raw_documents()
-            chunks = chunk_documents(docs)
-            progress.info(f"📊 共 {len(chunks)} 个文本块，正在向量化...")
-            vectorstore = build_vectorstore(chunks)
-            status.success(f"✅ 向量库构建完成（{len(chunks)} 个块）")
-
-        # Step 2: 加载 Reranker
-        reranker = APIReranker()
-
-        # Step 3: 构建检索器
-        chunks = rebuild_all_chunks(raw_dir)
-        tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
-        bm25 = BM25Okapi(tokenized)
-        hybrid_retriever = HybridRetriever(vectorstore, chunks)
-
-        def bm25_search(query: str, k: int = 3):
-            tokenized_query = list(jieba.cut(query))
-            scores = bm25.get_scores(tokenized_query)
-            top_idx = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
-            return [chunks[i] for i in top_idx]
-
-        # Step 4: 构建 LangGraph
-        graph = build_graph(vectorstore, bm25_search, hybrid_retriever, reranker=reranker)
-
-        status.success("")
-        progress.empty()
-        return {
-            "ok": True,
-            "vectorstore": vectorstore,
-            "chunks": chunks,
-            "hybrid_retriever": hybrid_retriever,
-            "bm25_search": bm25_search,
-            "graph": graph,
-            "reranker": reranker,
-            "raw_dir": raw_dir,
-            "total_chunks": len(chunks),
-        }
-
-    except Exception as e:
-        status.error(f"❌ 初始化失败: {e}")
-        return {"ok": False, "error": str(e)}
+def init_app_state():
+    """初始化 AppState，缓存避免重复冷启动"""
+    from src.core.state import AppState
+    state = AppState()
+    state.init_sync()
+    return state
 
 
-state = init_app()
+_state = init_app_state()
 
-if not state["ok"]:
-    st.error(f"应用启动失败：{state['error']}")
+if not _state.is_ready:
+    st.error(f"应用启动失败：{_state.error}")
     st.info("请检查 API Key 是否有效，或联系开发者。")
     st.stop()
 
-st.success(f"✅ 知识库就绪 · {state['total_chunks']} 个文本块")
+st.success(f"✅ 知识库就绪 · {_state.stats['total_chunks']} 个文本块 · {_state.stats['total_notes']} 篇笔记")
 
 # ============================================================
-# 侧边栏
+# 数据版本跟踪（用于检测新数据）
 # ============================================================
-with st.sidebar:
-    mode = st.radio("运行模式", ["问答模式", "洞察模式", "🕷️ 抓取数据"], index=0)
-    st.caption(f"📊 {state['total_chunks']} 个 chunk 已就绪")
-    st.caption("🕷️ 抓取模式仅限本地使用，首次需扫码登录")
+if "data_version" not in st.session_state:
+    st.session_state.data_version = 0
+
+
+def rebuild_indexes():
+    """重建所有索引（同步版本）"""
+    _state.rebuild_sync()
+    st.session_state.data_version += 1
+
 
 # ============================================================
-# 共用工具
+# 自动抓取工具
 # ============================================================
-def _rebuild():
-    """增量入库后重建所有检索器和 LangGraph"""
-    from src.ingestion import incremental_ingest, rebuild_all_chunks
-    from src.retrievers import HybridRetriever
-    from rank_bm25 import BM25Okapi
-    import jieba
-    incremental_ingest(state["raw_dir"], state["vectorstore"])
-    chunks = rebuild_all_chunks(state["raw_dir"])
-    tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
-    state["bm25"] = BM25Okapi(tokenized)
-    state["chunks"] = chunks
-    state["total_chunks"] = len(chunks)
-    hr = HybridRetriever(state["vectorstore"], chunks)
-    state["hybrid_retriever"] = hr
-    def bms(q2, k=3):
-        scores = state["bm25"].get_scores(list(jieba.cut(q2)))
-        return [chunks[i] for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]]
-    state["bm25_search"] = bms
-    from src.graph import build_graph
-    state["graph"] = build_graph(state["vectorstore"], bms, hr, reranker=state["reranker"])
-
 def _auto_fetch(keyword: str, count: int = 30) -> int:
     """自动抓取：使用真实爬虫从小红书抓取笔记和评论。返回抓取篇数。"""
     from src.crawler import CrawlerInterface
-    # 云端模式：从 Streamlit Secrets 读取 cookie
     cookies_json = ""
     try:
         cookies_json = st.secrets.get("XHS_COOKIES", "")
     except Exception:
         pass
-    crawler = CrawlerInterface(raw_dir=state["raw_dir"], cookies_json=cookies_json)
+    crawler = CrawlerInterface(raw_dir=_state.raw_dir, cookies_json=cookies_json)
     if not crawler.is_available:
         return 0
     result = crawler.crawl(keyword, count=count)
     c = result["count"]
     if c > 0:
-        _rebuild()
+        rebuild_indexes()
     return c
 
+
 def _should_fetch(answer: str) -> bool:
-    triggers = ["无法回答", "根据现有资料", "无法找到", "抱歉", "没有找到"]
+    triggers = ["无法回答", "根据现有资料", "无法找到", "抱歉", "没有找到",
+                 "暂无相关文档", "知识库中暂无"]
     return any(t in answer for t in triggers)
 
-# ============================================================
-# 洞察管道
-# ============================================================
-def run_insight(query: str, status_placeholder=None) -> str:
-    """洞察管道（非流式，兼容旧调用）"""
-    result = list(run_insight_stream(query, status_placeholder))
-    return result[-1] if result else ""
 
-
+# ============================================================
+# 洞察管道（流式）
+# ============================================================
 def run_insight_stream(query: str, status_placeholder=None):
     """
-    洞察管道（流式版本）。
-    检索完成后，生成报告时逐 token yield，适配 st.write_stream。
+    洞察管道（流式版本，同步）。
+    检索完成后，生成报告时逐 token yield，适配 st.write_stream / 手动流式。
     """
     from src.agents.comment_agent import CommentAnalyzer
     from src.agents.demand_agent import DemandAggregator
@@ -171,9 +88,9 @@ def run_insight_stream(query: str, status_placeholder=None):
     from src.config import RERANKER_THRESHOLD
 
     MIN_NOTES = 10
-    hr = state["hybrid_retriever"]
-    reranker = state["reranker"]
-    raw_dir = state["raw_dir"]
+    hr = _state.hybrid_retriever
+    reranker = _state.reranker
+    raw_dir = _state.raw_dir
 
     def _do_insight(docs, category):
         analyzer = CommentAnalyzer(raw_dir=raw_dir)
@@ -190,7 +107,7 @@ def run_insight_stream(query: str, status_placeholder=None):
             fallback = gen.generate_fallback(aggregated, category=category)
             yield fallback + f"\n\n（LLM 降级为模板。错误：{e}）"
 
-    docs = hr.hybrid_search(query, k=MIN_NOTES, bm25_k=30, final_k=MIN_NOTES)
+    docs = hr.hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
     if not docs:
         docs = []
 
@@ -206,19 +123,98 @@ def run_insight_stream(query: str, status_placeholder=None):
         status_placeholder.info(f"📊 知识库无「{query}」数据，正在自动抓取...")
     c = _auto_fetch(query, count=30)
     if c == 0:
-        yield f"无法获取「{query}」的数据。\n\n💡 请先在「🕷️ 抓取数据」模式中登录小红书，或在命令行运行:\n`uv run python src/real_crawler.py \"{query}\"`"
+        yield (f"无法获取「{query}」的数据。\n\n"
+               f"💡 请先在「🕷️ 抓取数据」模式中登录小红书，"
+               f"或在命令行运行:\n`uv run python src/real_crawler.py \"{query}\"`")
         return
 
-    import time; time.sleep(0.5)
-    fresh = state["hybrid_retriever"].hybrid_search(query, k=MIN_NOTES, bm25_k=30, final_k=MIN_NOTES)
+    import time
+    time.sleep(0.5)
+    fresh = _state.hybrid_retriever.hybrid_search(
+        query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES
+    )
     fresh_scores = reranker.rerank(query, fresh) if fresh else []
-    fresh_rel = [d for d, s in zip(fresh, fresh_scores) if s >= RERANKER_THRESHOLD]
+    fresh_rel = [doc for doc, s in zip(fresh, fresh_scores) if s >= RERANKER_THRESHOLD]
     if not fresh_rel:
         yield f"已抓取 {c} 篇但未匹配到相关内容，请稍后重试。"
         return
     yield f"（📥 已从小红书抓取 {c} 篇真实笔记）\n\n"
     yield from _do_insight(fresh_rel, query)
 
+
+# ============================================================
+# QA 管道（适配 v2.0 prompt_loader）
+# ============================================================
+def run_qa(query: str) -> str:
+    """执行单次 QA 问答（同步版本）"""
+    from src.config import RERANKER_THRESHOLD
+    from src.core.query_utils import clean_query, is_brand_comparison
+    from src.core.prompt_loader import get_prompt_loader
+    from langchain_openai import ChatOpenAI
+    from src.config import LLM_CONFIG
+
+    cleaned = clean_query(query)
+    k = 8 if is_brand_comparison(cleaned) else 5
+
+    docs = _state.hybrid_retriever.hybrid_search(
+        cleaned, k=k, bm25_k=max(40, k * 5), final_k=k
+    )
+    if not docs:
+        return ""
+
+    scores = _state.reranker.rerank(cleaned, docs)
+    scored = sorted(
+        [(d, s) for d, s in zip(docs, scores) if s >= RERANKER_THRESHOLD],
+        key=lambda x: x[1], reverse=True,
+    )
+    docs = [d for d, _ in scored] if scored else docs[:5]
+
+    context = "\n---\n".join(
+        f"[文档{i+1}] {d.page_content}" for i, d in enumerate(docs)
+    ) if docs else "暂无相关文档"
+
+    prompt = get_prompt_loader().load("gen_answer", "v2")
+    msg = prompt.format_messages(context=context, question=query)
+    llm = ChatOpenAI(**LLM_CONFIG)
+    resp = llm.invoke(msg)
+    return resp.content.strip()
+
+
+# ============================================================
+# 侧边栏
+# ============================================================
+with st.sidebar:
+    mode = st.radio(
+        "运行模式",
+        ["问答模式", "洞察模式", "🕷️ 抓取数据"],
+        index=0,
+    )
+    st.markdown("---")
+    st.caption(
+        f"📊 {_state.stats['total_chunks']} 个 chunk"
+        + f" · {_state.stats['total_notes']} 篇笔记"
+        + (f" · 🆕 有新数据" if st.session_state.data_version > 0 else "")
+    )
+    st.markdown("---")
+    if mode == "问答模式":
+        st.caption(
+            "💡 试试问：\n"
+            "- 磁吸感应灯哪个品牌好\n"
+            "- 学生寝室平价好物推荐\n"
+            "- 收纳盒怎么选"
+        )
+    elif mode == "洞察模式":
+        st.caption(
+            "💡 输入品类名称，如：\n"
+            "- 磁吸感应灯\n"
+            "- 寝室改造\n"
+            "- 桌面收纳"
+        )
+    else:
+        st.caption(
+            "💡 首次使用需扫码登录小红书，\n"
+            "之后 cookie 会自动保存复用。"
+        )
 
 # ============================================================
 # 问答模式
@@ -236,36 +232,30 @@ if mode == "问答模式":
         st.session_state.qa_msgs.append({"role": "user", "content": q})
         with st.chat_message("user"):
             st.markdown(q)
+
         with st.chat_message("assistant"):
             status = st.empty()
-
-            def _qa_run(query):
-                r = state["graph"].invoke({
-                    "question": query, "rewritten_question": "",
-                    "strategy": "", "documents": [], "relevant_docs": [],
-                    "generation": "", "retry_count": 0,
-                })
-                return r["generation"]
-
             with st.spinner("检索中..."):
-                ans = _qa_run(q)
+                ans = run_qa(q)
 
-            if _should_fetch(ans):
+            if not ans or _should_fetch(ans):
                 status.info(f"📊 知识库无「{q}」数据，正在从小红书实时抓取...")
                 c = _auto_fetch(q, count=30)
                 if c > 0:
                     status.info(f"✅ 已抓取 {c} 篇真实笔记，重新检索...")
-                    import time; time.sleep(0.5)
-                    ans = _qa_run(q)
-                    if _should_fetch(ans):
-                        ans = f"（📥 已抓取 {c} 篇笔记，但仍未匹配）\n\n{ans}"
-                    else:
+                    import time
+                    time.sleep(0.5)
+                    ans = run_qa(q)
+                    if ans and not _should_fetch(ans):
                         ans = f"（📥 已从小红书抓取 {c} 篇真实笔记）\n\n{ans}"
+                    else:
+                        ans = (f"（📥 已抓取 {c} 篇笔记，但仍未匹配）\n\n"
+                               f"{ans if ans else '未找到相关信息'}")
                 else:
                     ans = (f"{ans}\n\n"
                            f"💡 自动抓取未成功。\n"
                            f"   • 本地：`uv run python src/real_crawler.py \"{q}\"`\n"
-                           f"   • 云端：配置 Streamlit Secrets → XHS_COOKIES（运行 scripts/export_cookies.py 导出）")
+                           f"   • 云端：配置 Streamlit Secrets → XHS_COOKIES")
 
             status.empty()
             st.markdown(ans)
@@ -287,6 +277,7 @@ elif mode == "洞察模式":
         st.session_state.is_msgs.append({"role": "user", "content": q})
         with st.chat_message("user"):
             st.markdown(q)
+
         with st.chat_message("assistant"):
             s = st.empty()
             report_container = st.empty()
@@ -320,7 +311,7 @@ else:
             from src.real_crawler import XHSCrawler
             log_area.info(f"🕷️ 正在打开浏览器...")
 
-            # 云端模式：从 Secrets 读 cookie
+            # 云端模式：从 Streamlit Secrets 读取 cookie
             cookies_json = ""
             try:
                 cookies_json = st.secrets.get("XHS_COOKIES", "")
@@ -348,26 +339,8 @@ else:
             crawler.close()
 
             if saved > 0:
-                # 增量入库
-                from src.ingestion import incremental_ingest, rebuild_all_chunks
-                incremental_ingest(state["raw_dir"], state["vectorstore"])
-                chunks = rebuild_all_chunks(state["raw_dir"])
-                from rank_bm25 import BM25Okapi
-                import jieba
-                tokenized = [list(jieba.cut(d.page_content)) for d in chunks]
-                state["bm25"] = BM25Okapi(tokenized)
-                state["chunks"] = chunks
-                state["total_chunks"] = len(chunks)
-                from src.retrievers import HybridRetriever
-                hr = HybridRetriever(state["vectorstore"], chunks)
-                state["hybrid_retriever"] = hr
-                def bms(q2, k=3):
-                    scores = state["bm25"].get_scores(list(jieba.cut(q2)))
-                    return [chunks[i] for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]]
-                state["bm25_search"] = bms
-                from src.graph import build_graph
-                state["graph"] = build_graph(state["vectorstore"], bms, hr, reranker=state["reranker"])
-
+                # 增量入库 + 重建索引
+                rebuild_indexes()
                 log_area.success(f"✅ 完成！已抓取 {saved} 篇「{category}」笔记，知识库已更新。")
                 progress_bar.progress(100)
             else:
@@ -376,3 +349,12 @@ else:
             log_area.error(f"❌ 抓取出错: {e}")
             import traceback
             st.code(traceback.format_exc())
+
+# ============================================================
+# 底部
+# ============================================================
+st.markdown("---")
+st.caption(
+    f"🎯 小红书爆款雷达 v2.0 · 问答 + 洞察 + 自动抓取 · "
+    f"数据版本 {st.session_state.data_version}"
+)

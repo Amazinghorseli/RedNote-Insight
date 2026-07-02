@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+
+# Logs
+*.log
+
+# Test
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+data/chroma_db/*.sqlite3

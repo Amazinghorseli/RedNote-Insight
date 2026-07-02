@@ -1,0 +1,83 @@
+# =============================================================================
+# RedNote Insight — Docker Compose 编排
+# =============================================================================
+# 用法:
+#   cp .env.example .env  &&  vim .env   # 填入 API Key
+#   docker-compose up -d                 # 一键启动
+#   docker-compose logs -f api           # 查看日志
+#   docker-compose down                  # 停止
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # ===== API 服务 =====
+  api:
+    build: .
+    container_name: rednote-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/rednote_insight
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - api_data:/app/data
+    restart: unless-stopped
+    networks:
+      - rednote-net
+
+  # ===== PostgreSQL + pgvector =====
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: rednote-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rednote_insight
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rednote_insight"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - rednote-net
+
+  # ===== Redis（缓存 / 限流）=====
+  redis:
+    image: redis:7-alpine
+    container_name: rednote-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    networks:
+      - rednote-net
+
+# ===== 持久化卷 =====
+volumes:
+  pg_data:
+    driver: local
+  redis_data:
+    driver: local
+  api_data:
+    driver: local
+
+# ===== 网络 =====
+networks:
+  rednote-net:
+    driver: bridge
