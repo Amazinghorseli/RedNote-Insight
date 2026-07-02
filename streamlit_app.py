@@ -2,6 +2,10 @@
 streamlit_app.py — Streamlit Cloud 部署入口 (v2.0)
 ====================================================
 适配 v2.0 重构架构，使用 AppState 统一状态管理。
+
+注意：避免使用 st.empty() + 流式 markdown 组合，
+这是 Streamlit React DOM 冲突的已知触发源。
+改用 st.write_stream() 原生流式渲染。
 """
 import streamlit as st
 import sys
@@ -75,12 +79,17 @@ def _should_fetch(answer: str) -> bool:
 
 
 # ============================================================
-# 洞察管道（流式）
+# 洞察管道（流式，适配 st.write_stream）
 # ============================================================
-def run_insight_stream(query: str, status_placeholder=None):
+def run_insight_stream(query: str):
     """
-    洞察管道（流式版本，同步）。
-    检索完成后，生成报告时逐 token yield，适配 st.write_stream / 手动流式。
+    洞察管道流式版本。
+
+    所有输出（包括中间状态）都通过 yield 返回，
+    适配 st.write_stream() 原生流式渲染，避免 DOM 冲突。
+
+    用法:
+        report = st.write_stream(run_insight_stream("品类名"))
     """
     from src.agents.comment_agent import CommentAnalyzer
     from src.agents.demand_agent import DemandAggregator
@@ -93,6 +102,7 @@ def run_insight_stream(query: str, status_placeholder=None):
     raw_dir = _state.raw_dir
 
     def _do_insight(docs, category):
+        """文档 → 分析 → 聚合 → 逐 token 生成报告"""
         analyzer = CommentAnalyzer(raw_dir=raw_dir)
         analyses = analyzer.analyze(docs)
         if not analyses:
@@ -107,26 +117,30 @@ def run_insight_stream(query: str, status_placeholder=None):
             fallback = gen.generate_fallback(aggregated, category=category)
             yield fallback + f"\n\n（LLM 降级为模板。错误：{e}）"
 
+    # 1. 混合检索
     docs = hr.hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
     if not docs:
         docs = []
 
+    # 2. Rerank 重排序
     scores = reranker.rerank(query, docs) if docs else []
     relevant = [doc for doc, s in zip(docs, scores) if s >= RERANKER_THRESHOLD]
 
+    # 3. 数据足够 → 直接生成报告
     if len(relevant) >= 3:
         yield from _do_insight(relevant, query)
         return
 
-    # 无数据 → 自动抓取 → 重试
-    if status_placeholder:
-        status_placeholder.info(f"📊 知识库无「{query}」数据，正在自动抓取...")
+    # 4. 数据不足 → 自动抓取 → 重试
+    yield f"📊 知识库中「{query}」相关数据较少（{len(relevant)} 篇），正在自动抓取...\n\n"
     c = _auto_fetch(query, count=30)
     if c == 0:
         yield (f"无法获取「{query}」的数据。\n\n"
                f"💡 请先在「🕷️ 抓取数据」模式中登录小红书，"
                f"或在命令行运行:\n`uv run python src/real_crawler.py \"{query}\"`")
         return
+
+    yield f"（📥 已从小红书抓取 {c} 篇真实笔记）\n\n"
 
     import time
     time.sleep(0.5)
@@ -138,7 +152,7 @@ def run_insight_stream(query: str, status_placeholder=None):
     if not fresh_rel:
         yield f"已抓取 {c} 篇但未匹配到相关内容，请稍后重试。"
         return
-    yield f"（📥 已从小红书抓取 {c} 篇真实笔记）\n\n"
+
     yield from _do_insight(fresh_rel, query)
 
 
@@ -173,6 +187,7 @@ def run_qa(query: str) -> str:
         f"[文档{i+1}] {d.page_content}" for i, d in enumerate(docs)
     ) if docs else "暂无相关文档"
 
+    from src.core.prompt_loader import get_prompt_loader
     prompt = get_prompt_loader().load("gen_answer", "v2")
     msg = prompt.format_messages(context=context, question=query)
     llm = ChatOpenAI(**LLM_CONFIG)
@@ -234,15 +249,16 @@ if mode == "问答模式":
             st.markdown(q)
 
         with st.chat_message("assistant"):
-            status = st.empty()
+            # 直接输出文本，不经过 st.empty() 占位符
             with st.spinner("检索中..."):
                 ans = run_qa(q)
 
             if not ans or _should_fetch(ans):
-                status.info(f"📊 知识库无「{q}」数据，正在从小红书实时抓取...")
+                # 用 st.markdown 直接输出状态，不用 placeholder
+                st.markdown("📊 知识库暂无此数据，正在从小红书实时抓取...")
                 c = _auto_fetch(q, count=30)
                 if c > 0:
-                    status.info(f"✅ 已抓取 {c} 篇真实笔记，重新检索...")
+                    st.markdown(f"✅ 已抓取 {c} 篇真实笔记，重新检索...")
                     import time
                     time.sleep(0.5)
                     ans = run_qa(q)
@@ -257,12 +273,11 @@ if mode == "问答模式":
                            f"   • 本地：`uv run python src/real_crawler.py \"{q}\"`\n"
                            f"   • 云端：配置 Streamlit Secrets → XHS_COOKIES")
 
-            status.empty()
             st.markdown(ans)
         st.session_state.qa_msgs.append({"role": "assistant", "content": ans})
 
 # ============================================================
-# 洞察模式
+# 洞察模式（使用 st.write_stream 原生流式）
 # ============================================================
 elif mode == "洞察模式":
     st.subheader("📊 选品洞察")
@@ -279,14 +294,8 @@ elif mode == "洞察模式":
             st.markdown(q)
 
         with st.chat_message("assistant"):
-            s = st.empty()
-            report_container = st.empty()
-            with st.spinner("分析中..."):
-                full_report = ""
-                for chunk in run_insight_stream(q, s):
-                    full_report += chunk
-                    report_container.markdown(full_report + "▌")
-                report_container.markdown(full_report)
+            # st.write_stream 原生处理流式渲染，避免 DOM 冲突
+            full_report = st.write_stream(run_insight_stream(q))
         st.session_state.is_msgs.append({"role": "assistant", "content": full_report})
 
 # ============================================================
