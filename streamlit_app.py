@@ -1,13 +1,8 @@
 """
 streamlit_app.py — Streamlit Cloud 部署入口 (v2.0)
 ====================================================
-避开所有已知 Streamlit React DOM 冲突模式：
-  1. 不使用 @st.cache_resource（在 st.v1.40-1.42 中有 removeChild bug）
-  2. 初始化时不创建任何 UI 元素（无 spinner、无 text）
-  3. 不使用 st.chat_message / st.chat_input（高频 DOM 操作触发源）
-  4. 不使用 st.empty()
-  5. 使用 st.text_input + st.button 替代
-  6. 使用 st.write_stream 原生流式渲染
+保留修复：st.session_state 初始化（避开了 @st.cache_resource 的 DOM bug）
+恢复经典 UI：st.chat_message + st.chat_input 对话气泡风格
 """
 import streamlit as st
 import sys
@@ -162,70 +157,64 @@ with st.sidebar:
                + (f" · 🆕 有新数据" if st.session_state.data_version > 0 else ""))
 
 # ============================================================
-# 问答模式（使用 text_input + button，避免 chat_message/chat_input DOM bug）
+# 问答模式（经典 chat_message + chat_input 风格）
 # ============================================================
 if mode == "问答模式":
     st.subheader("💬 智能问答")
 
-    if "qa_history" not in st.session_state:
-        st.session_state.qa_history = []
+    if "qa_msgs" not in st.session_state:
+        st.session_state.qa_msgs = []
 
-    # 显示历史
-    for turn in st.session_state.qa_history:
-        st.markdown(f"""<div style="margin-bottom:12px;padding:8px 12px;border-radius:10px;background:#f0f2f6"><b>🧑 你</b><br>{turn["q"]}</div>""", unsafe_allow_html=True)
-        st.markdown(f"""<div style="margin-bottom:12px;padding:8px 12px;border-radius:10px;background:#e8f4fd"><b>🤖 AI</b><br>{turn["a"]}</div>""", unsafe_allow_html=True)
+    for m in st.session_state.qa_msgs:
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
 
-    q = st.text_input("输入你的问题：", placeholder="例如：磁吸感应灯哪个品牌好？", key="qa_input")
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        asked = st.button("发送", type="primary", use_container_width=True)
+    if q := st.chat_input("输入问题..."):
+        st.session_state.qa_msgs.append({"role": "user", "content": q})
+        with st.chat_message("user"):
+            st.markdown(q)
 
-    if asked and q:
-        st.session_state.qa_history.append({"q": q, "a": "⏳ 思考中..."})
+        with st.chat_message("assistant"):
+            ans = run_qa(q)
 
-        ans = run_qa(q)
-
-        if not ans or _should_fetch(ans):
-            st.markdown("📊 知识库暂无此数据，正在从小红书实时抓取...")
-            c = _auto_fetch(q, count=30)
-            if c > 0:
-                st.markdown(f"✅ 已抓取 {c} 篇真实笔记，重新检索...")
-                import time; time.sleep(0.5)
-                ans = run_qa(q)
-                if ans and not _should_fetch(ans):
-                    ans = f"（📥 已从小红书抓取 {c} 篇真实笔记）\n\n{ans}"
+            if not ans or _should_fetch(ans):
+                st.markdown("📊 知识库暂无此数据，正在从小红书实时抓取...")
+                c = _auto_fetch(q, count=30)
+                if c > 0:
+                    st.markdown(f"✅ 已抓取 {c} 篇真实笔记，重新检索...")
+                    import time; time.sleep(0.5)
+                    ans = run_qa(q)
+                    if ans and not _should_fetch(ans):
+                        ans = f"（📥 已从小红书抓取 {c} 篇真实笔记）\n\n{ans}"
+                    else:
+                        ans = (f"（📥 已抓取 {c} 篇笔记，但仍未匹配）\n\n{ans or '未找到相关信息'}")
                 else:
-                    ans = (f"（📥 已抓取 {c} 篇笔记，但仍未匹配）\n\n{ans or '未找到相关信息'}")
-            else:
-                ans = f"{ans}\n\n💡 自动抓取未成功。\n  • 本地: `uv run python src/real_crawler.py \"{q}\"`\n  • 云端: 配置 Streamlit Secrets → XHS_COOKIES"
+                    ans = f"{ans}\n\n💡 自动抓取未成功。\n  • 本地: `uv run python src/real_crawler.py \"{q}\"`\n  • 云端: 配置 Streamlit Secrets → XHS_COOKIES"
 
-        st.session_state.qa_history[-1]["a"] = ans
-        st.rerun()
+            st.markdown(ans)
+        st.session_state.qa_msgs.append({"role": "assistant", "content": ans})
 
 # ============================================================
-# 洞察模式（使用 st.write_stream 原生流式）
+# 洞察模式（chat_message + st.write_stream 流式）
 # ============================================================
 elif mode == "洞察模式":
     st.subheader("📊 选品洞察")
 
-    if "insight_history" not in st.session_state:
-        st.session_state.insight_history = []
+    if "is_msgs" not in st.session_state:
+        st.session_state.is_msgs = []
 
-    for turn in st.session_state.insight_history:
-        st.markdown(f"""<div style="margin-bottom:12px;padding:8px 12px;border-radius:10px;background:#f0f2f6"><b>📋 品类</b><br>{turn["q"]}</div>""", unsafe_allow_html=True)
-        st.markdown(f"""<div style="margin-bottom:12px;padding:8px 12px;border-radius:10px;background:#fffbe6"><b>📊 洞察报告</b><br>{turn["a"]}</div>""", unsafe_allow_html=True)
+    for m in st.session_state.is_msgs:
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
 
-    q = st.text_input("输入品类名称：", placeholder="例如：磁吸感应灯、健身服", key="insight_input")
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        asked = st.button("分析", type="primary", use_container_width=True)
+    if q := st.chat_input("输入品类，如：磁吸感应灯、健身服..."):
+        st.session_state.is_msgs.append({"role": "user", "content": q})
+        with st.chat_message("user"):
+            st.markdown(q)
 
-    if asked and q:
-        report_box = st.container()
-        with report_box:
+        with st.chat_message("assistant"):
             report = st.write_stream(run_insight_stream(q))
-        st.session_state.insight_history.append({"q": q, "a": report})
-        st.rerun()
+        st.session_state.is_msgs.append({"role": "assistant", "content": report})
 
 # ============================================================
 # 抓取模式
