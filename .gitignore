@@ -14,6 +14,8 @@ sample_data.csv
 
 # 运行时日志
 app.log
+server.log
+*.log
 
 # Vector DB index files are small — we COMMIT them so Streamlit Cloud
 # doesn't have to rebuild from scratch (saves 30-60s cold start).
@@ -35,3 +37,7 @@ __pycache__/
 # 小红书登录 Cookie（敏感信息，不要提交）
 data/cookies.json
 .streamlit/secrets.toml
+
+# 运行时缓存
+data/trending_cache.json
+data/trending_cache*.json
