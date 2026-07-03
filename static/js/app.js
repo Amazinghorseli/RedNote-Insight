@@ -15,6 +15,74 @@ const state = {
     creatorDone: false,       // 选题方案是否完成
 };
 
+// ===== 搜索历史（localStorage）=====
+const HISTORY_KEY = 'rni_search_history';
+const MAX_HISTORY = 10;
+
+function loadSearchHistory() {
+    try {
+        var raw = localStorage.getItem(HISTORY_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+}
+
+function saveSearchHistory(keyword) {
+    if (!keyword || !keyword.trim()) return;
+    var kw = keyword.trim();
+    var history = loadSearchHistory();
+    // 去重：删掉已有同词条
+    history = history.filter(function (h) { return h.keyword !== kw; });
+    // 加到最前面
+    history.unshift({ keyword: kw, time: Date.now() });
+    // 限制条数
+    if (history.length > MAX_HISTORY) history = history.slice(0, MAX_HISTORY);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) { }
+    renderSearchHistory();
+}
+
+function clearSearchHistory() {
+    try { localStorage.removeItem(HISTORY_KEY); } catch (e) { }
+    renderSearchHistory();
+}
+
+function renderSearchHistory() {
+    var container = document.getElementById('search-history');
+    if (!container) return;
+    var history = loadSearchHistory();
+    if (history.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+    container.style.display = 'flex';
+    var html = '<span class="history-label">🕐 最近搜索：</span>';
+    history.forEach(function (h) {
+        html += '<span class="history-item" data-kw="' + h.keyword + '">' + h.keyword + '</span>';
+    });
+    html += '<span class="history-clear" id="clear-history" title="清除搜索历史">✕</span>';
+    container.innerHTML = html;
+
+    // 绑定点击事件
+    container.querySelectorAll('.history-item').forEach(function (el) {
+        el.addEventListener('click', function () {
+            var kw = el.dataset.kw;
+            if (state.isSearching) { showToast('请求处理中，请稍候...', 'warning'); return; }
+            categoryInput.value = kw;
+            setTagLoading(el);
+            showCategoryDetail(kw, 'selection');
+        });
+    });
+
+    // 绑定清除按钮
+    var clearBtn = document.getElementById('clear-history');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            clearSearchHistory();
+            showToast('搜索历史已清除', 'success');
+        });
+    }
+}
+
 // ===== DOM 引用 =====
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
@@ -219,6 +287,8 @@ function streamInsight(category, defaultTab) {
         '<button class="btn-export" onclick="copyAllReports()">📋 一键复制全部</button>' +
         '<button class="btn-export btn-export-alt" onclick="copyReport(\'report-selection\')">📊 仅复制选品</button>' +
         '<button class="btn-export btn-export-alt" onclick="copyReport(\'report-creator\')">🎬 仅复制选题</button>' +
+        '<button class="btn-download" onclick="downloadAllMarkdown()" title="下载完整报告为 Markdown 文件">📥 下载 .md</button>' +
+        '<button class="btn-print" onclick="printReport()" title="打印为 PDF">🖨️ 打印 PDF</button>' +
         '</div>' +
         '<div class="detail-header">' +
         '<h2>' + category + '</h2>' +
@@ -230,11 +300,21 @@ function streamInsight(category, defaultTab) {
         '<button class="detail-tab' + crActive + '" data-tab="creator" id="tab-creator">🎬 选题方案</button>' +
         '</div>' +
         '<div class="detail-tab-content' + selActive + '" id="panel-selection" style="display:' + selPanelDisplay + ';">' +
-        '<div id="report-selection" class="insight-report" style="min-height:80px;color:#888;">等待生成...</div>' +
-        '</div>' +
+        '<div id="report-selection" class="insight-report" style="min-height:80px;color:#888;">' +
+        '<div class="skeleton-block"><div class="skeleton skeleton-heading"></div>' +
+        '<div class="skeleton skeleton-line medium"></div>' +
+        '<div class="skeleton skeleton-line short"></div>' +
+        '<div class="skeleton skeleton-line medium"></div>' +
+        '<div class="skeleton skeleton-line short"></div></div>' +
+        '</div></div>' +
         '<div class="detail-tab-content' + crActive + '" id="panel-creator" style="display:' + crPanelDisplay + ';">' +
-        '<div id="report-creator" class="insight-report" style="min-height:80px;color:#888;">等待生成...</div>' +
-        '</div>';
+        '<div id="report-creator" class="insight-report" style="min-height:80px;color:#888;">' +
+        '<div class="skeleton-block"><div class="skeleton skeleton-heading"></div>' +
+        '<div class="skeleton skeleton-line medium"></div>' +
+        '<div class="skeleton skeleton-line short"></div>' +
+        '<div class="skeleton skeleton-line medium"></div>' +
+        '<div class="skeleton skeleton-line short"></div></div>' +
+        '</div></div>';
 
     // Tab 切换事件
     document.querySelectorAll('.detail-tab').forEach(function (tab) {
@@ -289,13 +369,15 @@ function streamInsight(category, defaultTab) {
                 if (payload.stage === 'crawl') showToast('正在从小红书实时抓取，预计 30-60 秒...', 'warning');
                 if (payload.stage === 'login') showToast('请在浏览器扫码登录小红书...', 'warning');
                 if (payload.stage === 'selection_done') {
-                    selectionEl.style.color = '#333';
+                    selectionEl.innerHTML = renderMarkdown(selectionReport);
+                    selectionEl.classList.add('rendered');
                     document.getElementById('tab-selection').textContent = '📊 选品报告 ✓';
                     state.selectionDone = true;
                     tryShowExport();
                 }
                 if (payload.stage === 'creator_done') {
-                    creatorEl.style.color = '#333';
+                    creatorEl.innerHTML = renderMarkdown(creatorReport);
+                    creatorEl.classList.add('rendered');
                     document.getElementById('tab-creator').textContent = '🎬 选题方案 ✓';
                     state.creatorDone = true;
                     tryShowExport();
@@ -315,7 +397,17 @@ function streamInsight(category, defaultTab) {
                 noteCount = payload.note_count || 0;
                 document.getElementById('detail-status').textContent = '✅ 完成';
                 document.getElementById('detail-status').className = 'rec-badge rec-strong';
-                // done 事件也可能触发导出条
+                // 渲染 Markdown（如果还没渲染）
+                if (selectionReport && !state.selectionDone) {
+                    selectionEl.innerHTML = renderMarkdown(selectionReport);
+                    selectionEl.classList.add('rendered');
+                    document.getElementById('tab-selection').textContent = '📊 选品报告 ✓';
+                }
+                if (creatorReport && !state.creatorDone) {
+                    creatorEl.innerHTML = renderMarkdown(creatorReport);
+                    creatorEl.classList.add('rendered');
+                    document.getElementById('tab-creator').textContent = '🎬 选题方案 ✓';
+                }
                 state.selectionDone = true;
                 state.creatorDone = true;
                 tryShowExport();
@@ -323,8 +415,8 @@ function streamInsight(category, defaultTab) {
 
             } else if (type === 'error') {
                 var msg = payload.message || '未知错误';
-                if (!selectionReport) selectionEl.textContent = msg;
-                if (!creatorReport) creatorEl.textContent = msg;
+                if (!selectionReport) selectionEl.innerHTML = '<div class="error-state"><div class="error-icon">⚠️</div><p>' + msg + '</p><div class="sse-error-actions"><button class="btn-retry" onclick="showCategoryDetail(\'' + state.activeCategory + '\', \'selection\')">🔄 重试</button></div></div>';
+                if (!creatorReport) creatorEl.innerHTML = '<div class="error-state"><div class="error-icon">⚠️</div><p>' + msg + '</p><div class="sse-error-actions"><button class="btn-retry" onclick="showCategoryDetail(\'' + state.activeCategory + '\', \'selection\')">🔄 重试</button></div></div>';
                 showToast(msg, 'error');
                 onStreamDone();
             }
@@ -333,8 +425,21 @@ function streamInsight(category, defaultTab) {
 
     function onStreamDone() {
         state.activeSSE = null;
-        if (!selectionReport) selectionEl.textContent = '报告生成中...';
-        if (!creatorReport) creatorEl.textContent = '报告生成中...';
+        // 安全网：如果没触发过 selection_done/creator_done，这里再做一次渲染
+        if (selectionReport) {
+            selectionEl.innerHTML = renderMarkdown(selectionReport);
+            selectionEl.classList.add('rendered');
+            document.getElementById('tab-selection').textContent = '📊 选品报告 ✓';
+        } else {
+            selectionEl.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>报告生成中，请稍候...</p></div>';
+        }
+        if (creatorReport) {
+            creatorEl.innerHTML = renderMarkdown(creatorReport);
+            creatorEl.classList.add('rendered');
+            document.getElementById('tab-creator').textContent = '🎬 选题方案 ✓';
+        } else {
+            creatorEl.innerHTML = '<div class="empty-state"><div class="empty-icon">🎬</div><p>报告生成中，请稍候...</p></div>';
+        }
         unlockSearch();
     }
 
@@ -385,12 +490,22 @@ function streamInsight(category, defaultTab) {
             }).catch(function (err) {
                 if (cancelled) return;
                 showToast('连接中断: ' + err.message, 'error');
+                if (!selectionReport && !creatorReport) {
+                    var retryBtn = '<div class="error-state"><div class="error-icon">🔌</div><p>连接中断</p><p style="font-size:13px;">' + err.message + '</p><button class="btn-retry" onclick="showCategoryDetail(\'' + category + '\', \'' + defaultTab + '\')">🔄 重试</button></div>';
+                    selectionEl.innerHTML = retryBtn;
+                    creatorEl.innerHTML = retryBtn;
+                }
                 unlockSearch();
             });
         }
         readStream();
     }).catch(function (err) {
         showToast('服务连接失败: ' + err.message, 'error');
+        if (!selectionReport && !creatorReport) {
+            var retryBtn = '<div class="error-state"><div class="error-icon">🔌</div><p>服务连接失败</p><p style="font-size:13px;">' + err.message + '</p><button class="btn-retry" onclick="showCategoryDetail(\'' + category + '\', \'' + defaultTab + '\')">🔄 重试</button></div>';
+            selectionEl.innerHTML = retryBtn;
+            creatorEl.innerHTML = retryBtn;
+        }
         unlockSearch();
     });
 }
@@ -403,6 +518,7 @@ function showCategoryDetail(catName, defaultTab) {
     }
     lockSearch();
     state.activeCategory = catName;
+    saveSearchHistory(catName);  // 记入搜索历史
     streamInsight(catName, defaultTab || 'selection');
 }
 
@@ -739,7 +855,208 @@ rankingList.addEventListener('click', function (e) {
     }
 });
 
-// ===== 搜索处理（防抖 + 去重）=====
+// ===== Markdown 极简渲染器 =====
+function renderMarkdown(text) {
+    if (!text) return '';
+    var lines = text.split('\n');
+    var html = '';
+    var inTable = false;
+    var inList = false;
+    var inCodeBlock = false;
+    var tableHeader = '';
+    var i = 0;
+
+    function closeList() { if (inList) { html += '</ul>\n'; inList = false; } }
+    function closeTable() { if (inTable) { html += '</tbody></table>\n'; inTable = false; } }
+    function flushInline(t) {
+        // 转义 HTML
+        t = t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        // 粗体
+        t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        // 行内代码
+        t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
+        return t;
+    }
+
+    while (i < lines.length) {
+        var line = lines[i];
+        var trimmed = line.trim();
+
+        // 跳过空行（关闭列表并继续）
+        if (!trimmed) {
+            closeList();
+            i++;
+            continue;
+        }
+
+        // 代码块
+        if (trimmed.startsWith('```')) {
+            closeList(); closeTable();
+            if (inCodeBlock) { html += '</code></pre>\n'; inCodeBlock = false; }
+            else { html += '<pre><code>'; inCodeBlock = true; }
+            i++;
+            continue;
+        }
+        if (inCodeBlock) {
+            html += line + '\n';
+            i++;
+            continue;
+        }
+
+        // 表格（检测到 | 开头的行）
+        if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+            closeList();
+            var cells = trimmed.split('|').filter(function (c) { return c.trim(); });
+            // 检测分隔行
+            if (cells.every(function (c) { return /^[:]?[-]{2,}[:]?$/.test(c.trim()); })) {
+                i++;
+                continue;
+            }
+            if (!inTable) {
+                html += '<table><thead><tr>';
+                cells.forEach(function (c) { html += '<th>' + flushInline(c.trim()) + '</th>'; });
+                html += '</tr></thead><tbody>\n';
+                inTable = true;
+            } else {
+                html += '<tr>';
+                cells.forEach(function (c) { html += '<td>' + flushInline(c.trim()) + '</td>'; });
+                html += '</tr>\n';
+            }
+            i++;
+            continue;
+        }
+        closeTable();
+
+        // 水平分隔线
+        if (/^[━]{3,}$/.test(trimmed) || /^[-*_]{3,}$/.test(trimmed)) {
+            closeList();
+            html += '<hr>\n';
+            i++;
+            continue;
+        }
+
+        // 标题
+        if (trimmed.startsWith('### ')) { closeList(); html += '<h3>' + flushInline(trimmed.slice(4)) + '</h3>\n'; i++; continue; }
+        if (trimmed.startsWith('## '))  { closeList(); html += '<h2>' + flushInline(trimmed.slice(3)) + '</h2>\n'; i++; continue; }
+        if (trimmed.startsWith('# '))   { closeList(); html += '<h1>' + flushInline(trimmed.slice(2)) + '</h1>\n'; i++; continue; }
+
+        // 【中文标题】→ h2
+        if (/^【.+】/.test(trimmed)) { closeList(); html += '<h2>' + flushInline(trimmed) + '</h2>\n'; i++; continue; }
+
+        // 列表项
+        if (/^[-*]\s/.test(trimmed) || /^\d+[.)]\s/.test(trimmed)) {
+            if (!inList) { html += '<ul>\n'; inList = true; }
+            var liText = trimmed.replace(/^[-*\d]+[.)]\s*/, '');
+            html += '<li>' + flushInline(liText) + '</li>\n';
+            i++;
+            continue;
+        }
+        closeList();
+
+        // 普通段落
+        html += '<p>' + flushInline(trimmed) + '</p>\n';
+        i++;
+    }
+
+    closeList();
+    closeTable();
+    if (inCodeBlock) { html += '</code></pre>\n'; }
+    return html;
+}
+
+// ===== 报告下载 =====
+function downloadMarkdown(panelId, filename) {
+    var el = document.getElementById(panelId || 'report-selection');
+    var text = el ? el.textContent : '';
+    if (!text.trim()) { showToast('没有可下载的内容', 'warning'); return; }
+
+    // 添加品牌页脚
+    text += '\n\n---\n*由 RedNote-Insight 生成 · ' + new Date().toLocaleDateString('zh-CN') + '*';
+    var fname = (filename || '报告') + '_' + new Date().toISOString().slice(0, 10) + '.md';
+
+    var blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('✅ Markdown 已下载: ' + fname, 'success');
+}
+
+function downloadAllMarkdown() {
+    var selEl = document.getElementById('report-selection');
+    var crEl = document.getElementById('report-creator');
+    var selText = (selEl && selEl.textContent.trim()) ? selEl.textContent.trim() : '';
+    var crText = (crEl && crEl.textContent.trim()) ? crEl.textContent.trim() : '';
+
+    if (!selText && !crText) { showToast('没有可下载的内容', 'warning'); return; }
+
+    var combined = '';
+    if (selText) combined += '# 📊 选品报告\n\n' + selText;
+    if (crText) combined += '\n\n---\n\n# 🎬 选题方案\n\n' + crText;
+    combined += '\n\n---\n*由 RedNote-Insight 生成 · ' + new Date().toLocaleDateString('zh-CN') + '*';
+
+    var fname = state.activeCategory + '_双报告_' + new Date().toISOString().slice(0, 10) + '.md';
+    var blob = new Blob([combined], { type: 'text/markdown;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('✅ Markdown 已下载: ' + fname, 'success');
+}
+
+function printReport() {
+    var selEl = document.getElementById('report-selection');
+    var crEl = document.getElementById('report-creator');
+    var selText = (selEl && selEl.textContent.trim()) ? selEl.textContent.trim() : '';
+    var crText = (crEl && crEl.textContent.trim()) ? crEl.textContent.trim() : '';
+
+    if (!selText && !crText) { showToast('没有可打印的内容', 'warning'); return; }
+
+    var printWindow = window.open('', '_blank');
+    var content = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>选品报告</title>';
+    content += '<style>body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.8;max-width:720px;margin:40px auto;padding:0 20px;color:#333;}h1{font-size:22px;border-bottom:2px solid #ff5a5f;padding-bottom:8px;}h2{font-size:18px;color:#ff5a5f;}h3{font-size:15px;}strong{color:#ff5a5f;}table{width:100%;border-collapse:collapse;margin:10px 0;}th{background:#fff0f0;color:#ff5a5f;padding:8px 12px;text-align:left;border:1px solid #e0e0e0;}td{padding:7px 12px;border:1px solid #e0e0e0;}hr{border:none;border-top:2px solid #ff5a5f;margin:16px 0;}ul,ol{padding-left:20px;}@media print{body{margin:0;padding:10mm;}}';
+    content += '</style></head><body>';
+
+    if (selText) {
+        var rendered = renderMarkdown(selText);
+        content += '<h1>📊 选品报告</h1>' + rendered;
+    }
+    if (crText) {
+        content += '<hr style="margin:30px 0">';
+        var rendered2 = renderMarkdown(crText);
+        content += '<h1>🎬 选题方案</h1>' + rendered2;
+    }
+    content += '<p style="color:#999;font-size:12px;margin-top:30px;">由 RedNote-Insight 生成 · ' + new Date().toLocaleDateString('zh-CN') + '</p>';
+    content += '</body></html>';
+
+    printWindow.document.write(content);
+    printWindow.document.close();
+    setTimeout(function () { printWindow.print(); }, 300);
+}
+
+
+// ===== 加载骨架屏 =====
+function showSkeleton(containerId, lines) {
+    if (!lines) lines = 5;
+    var el = document.getElementById(containerId);
+    if (!el) return;
+    var html = '<div class="skeleton-block">';
+    html += '<div class="skeleton skeleton-heading"></div>';
+    for (var i = 0; i < lines; i++) {
+        var cls = i % 3 === 0 ? 'short' : (i % 3 === 1 ? 'medium' : '');
+        html += '<div class="skeleton skeleton-line ' + cls + '"></div>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+}
 
 var searchTimeout = null;
 function handleSearch(query, defaultTab) {
@@ -794,6 +1111,8 @@ function renderTrendingTags(items) {
 // ===== 初始化 =====
 
 async function init() {
+    // 骨架屏：排行榜区域
+    showSkeleton('ranking-list', 6);
     loadingEl.style.display = 'flex';
 
     // 加载热词
@@ -854,6 +1173,9 @@ async function init() {
         opt.value = o.category;
         suggestions.appendChild(opt);
     });
+
+    // 渲染搜索历史
+    renderSearchHistory();
 
     loadingEl.style.display = 'none';
 

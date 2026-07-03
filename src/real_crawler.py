@@ -44,6 +44,7 @@ class XHSCrawler:
         self.cookies_json = cookies_json  # 云端模式：从 secrets 传入的 cookie JSON
         self._logged_in = False
         self._is_cloud = self._detect_cloud()
+        self._need_relogin = False   # search() 发现登录弹窗时设为 True
         self._init_browser()
 
     @staticmethod
@@ -60,6 +61,15 @@ class XHSCrawler:
         co.set_argument("--disable-gpu")
         co.set_argument("--disable-dev-shm-usage")
         co.set_argument("--disable-blink-features=AutomationControlled")
+        co.set_argument("--disable-features=VizDisplayCompositor")
+        co.set_argument("--window-size=1920,1080")
+        # 随机化 User-Agent，避免被识别为爬虫
+        ua = random.choice([
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        ])
+        co.set_user_agent(ua)
 
         if self._is_cloud or self.headless:
             co.headless(True)
@@ -73,7 +83,37 @@ class XHSCrawler:
                         break
 
         self.page = ChromiumPage(co)
+        # 额外隐身：覆盖 webdriver 特征
+        self._apply_stealth()
         self._load_cookies()
+
+    def _apply_stealth(self):
+        """隐藏自动化特征，避免被网站检测到"""
+        try:
+            self.page.run_js("""
+                // 覆盖 navigator.webdriver
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                // 覆盖 chrome 对象
+                window.chrome = { runtime: {} };
+                // 覆盖权限查询
+                const originalQuery = navigator.permissions.query;
+                navigator.permissions.query = (params) => (
+                    params.name === 'notifications' ?
+                        Promise.resolve({ state: 'granted' }) :
+                        originalQuery(params)
+                );
+                // 覆盖 plugins 长度
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5],
+                });
+                // 覆盖 languages
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['zh-CN', 'zh', 'en'],
+                });
+            """)
+            print("[Crawler] [Stealth] 隐身脚本已注入")
+        except Exception as e:
+            print(f"[Crawler] [Stealth] 注入失败（可忽略）: {e}")
 
     @property
     def is_logged_in(self) -> bool:
@@ -114,7 +154,18 @@ class XHSCrawler:
                 # 批量设置 cookie
                 self.page.set.cookies(cookies)
                 self.page.get("https://www.xiaohongshu.com")
-                time.sleep(2)
+                time.sleep(3)
+                # 检查是否有登录弹窗
+                if self._is_login_modal_shown():
+                    print("[Crawler] [WARN] 首页显示登录弹窗，尝试关闭...")
+                    self._close_login_modal()
+                    time.sleep(1)
+                    # 再试试 explore 页
+                    self.page.get("https://www.xiaohongshu.com/explore")
+                    time.sleep(3)
+                    if self._is_login_modal_shown():
+                        self._close_login_modal()
+                        time.sleep(1)
                 if self._verify_logged_in():
                     self._logged_in = True
                     print("[Crawler] [OK] Cookie 有效，已恢复登录态")
@@ -130,12 +181,85 @@ class XHSCrawler:
         else:
             print("[Crawler] [WARN] 未登录。请运行: uv run python src/real_crawler.py \"品类名\" 来登录")
 
+    def _is_login_modal_shown(self) -> bool:
+        """检查当前页面是否显示了登录弹窗（CSS 检测 + HTML 文本兜底）"""
+        try:
+            # 方法1: CSS 选择器检测弹窗元素
+            for sel in [
+                "css:.login-modal",
+                "css:.reds-modal-open.login-modal",
+                "css:[class*='login-modal']",
+                "xpath://div[contains(@class,'login-modal')]",
+            ]:
+                try:
+                    el = self.page.ele(sel, timeout=0.5)
+                    if el and el.is_displayed():
+                        return True
+                except Exception:
+                    continue
+
+            # 方法2: 检查页面文本（兜底：有时弹窗在 DOM 但不可被 CSS 选择器识别）
+            try:
+                page_text = self.page.text or ""
+                login_markers = ["登录查看精彩内容", "扫码登录", "登录后查看更多"]
+                for marker in login_markers:
+                    if marker in page_text:
+                        print(f"[Crawler] [Login] 页面文本检测到登录提示: '{marker}'")
+                        return True
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return False
+
+    def _close_login_modal(self) -> bool:
+        """尝试关闭登录弹窗"""
+        try:
+            for sel in [
+                "css:.close-button",
+                "css:.icon-btn-wrapper.close-button",
+                "css:[class*='close-button']",
+                "css:.reds-modal button",
+                "xpath://div[contains(@class,'close-button')]",
+                "xpath://*[local-name()='svg' and @xlink:href='#close']/..",
+            ]:
+                try:
+                    el = self.page.ele(sel, timeout=0.5)
+                    if el and el.is_displayed():
+                        el.click()
+                        time.sleep(1)
+                        print("[Crawler] [Login] 已尝试关闭登录弹窗")
+                        return True
+                except Exception:
+                    continue
+
+            # 兜底: 按 ESC 键
+            try:
+                self.page.run_js("document.querySelector('.close-button')?.click()")
+                time.sleep(1)
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return False
+
     def _verify_logged_in(self) -> bool:
         """
         通过 cookie 和页面元素双重验证是否已登录小红书。
         比单纯检查 URL 更可靠，因为 Xiaohongshu 可能使用弹窗登录而非页面跳转。
         """
         try:
+            # 方法0: 先检查当前页面是否有登录弹窗
+            if self._is_login_modal_shown():
+                # 有登录弹窗 → 尝试关闭它，如果能关掉且有关闭后的内容，说明可能还有效
+                closed = self._close_login_modal()
+                if closed:
+                    time.sleep(1)
+                    # 关闭后再检查一下弹窗是否还在
+                    if not self._is_login_modal_shown():
+                        # 弹窗已关闭，cookie 可能还有效
+                        pass
+
             # 方法1: 检查是否存在小红书认证 cookie
             xhs_cookies = self.page.cookies(all_domains=True, all_info=False)
             auth_cookie_names = {"a1", "web_session", "session", "sid", "authorization", "token", "xhs"}
@@ -144,7 +268,8 @@ class XHSCrawler:
                 if name in auth_cookie_names:
                     val = cookie.get("value", "")
                     if val and len(val) > 5:
-                        return True
+                        # 找到有效 cookie，但还要确保没有登录弹窗
+                        return not self._is_login_modal_shown()
 
             # 方法2: 检查页面上登录后的特征元素
             for selector in [
@@ -166,6 +291,10 @@ class XHSCrawler:
             if "login" in url or "passport" in url:
                 self.page.get("https://www.xiaohongshu.com")
                 time.sleep(2)
+                # 导航后检查登录弹窗
+                if self._is_login_modal_shown():
+                    self._close_login_modal()
+                    time.sleep(1)
                 # 导航后直接检查 cookie（避免递归）
                 xhs_cookies = self.page.cookies(all_domains=True, all_info=False)
                 for cookie in xhs_cookies:
@@ -173,12 +302,12 @@ class XHSCrawler:
                     if name in auth_cookie_names:
                         val = cookie.get("value", "")
                         if val and len(val) > 5:
-                            return True
+                            return not self._is_login_modal_shown()
         except Exception:
             pass
         return False
 
-    def login_interactive(self, timeout_minutes=5):
+    def login_interactive(self, timeout_minutes=10):
         """
         交互式登录：打开浏览器，等待用户扫码登录。
         使用 URL + cookie + 页面元素三重检测，避免传统 URL-only 检测的误判。
@@ -192,15 +321,29 @@ class XHSCrawler:
         print("[Crawler] [Action] 请在浏览器窗口中扫码登录")
         print(f"[Crawler] [Wait] 等待登录完成（最长{timeout_minutes}分钟）...")
 
-        # 轮询检测登录状态（每2秒检测一次）
-        max_attempts = timeout_minutes * 30  # 2秒间隔
+        # 轮询检测登录状态（每1秒检测一次，响应更快）
+        max_attempts = timeout_minutes * 60  # 1秒间隔
         for attempt in range(max_attempts):
-            time.sleep(2)
+            time.sleep(1)
             try:
                 if self._verify_logged_in():
                     print("[Crawler] [OK] 登录成功！")
                     self._logged_in = True
                     self._save_cookies()
+                    # 登录后暖启动：验证 session
+                    try:
+                        print("[Crawler] [Login] 验证 session 有效性...")
+                        self.page.get("https://www.xiaohongshu.com/explore")
+                        time.sleep(3)
+                        if self._is_note_page_blocked() or self._is_login_modal_shown():
+                            print("[Crawler] [WARN] 登录后仍被拦截，等待后重试...")
+                            time.sleep(5)
+                            self.page.get("https://www.xiaohongshu.com/explore")
+                            time.sleep(3)
+                        else:
+                            print("[Crawler] [OK] session 验证通过")
+                    except Exception:
+                        pass
                     return True
             except Exception:
                 pass
@@ -208,6 +351,7 @@ class XHSCrawler:
         current_url = self.page.url[:80] if self.page else "N/A"
         print(f"[Crawler] [FAIL] 登录超时（{timeout_minutes}分钟），当前URL: {current_url}")
         print("[Crawler] [Hint] 如果已扫码但没有反应，请刷新页面重新扫码")
+        print("[Crawler] [Hint] 也可以手动在浏览器地址栏输入 xiaohongshu.com 确保已登录")
         return False
 
     def _save_cookies(self):
@@ -230,90 +374,217 @@ class XHSCrawler:
         notes = []
 
         url = SEARCH_URL.format(keyword)
-        self.page.get(url)
-        time.sleep(3)
 
-        # 滚动加载更多
-        last_count = 0
-        no_new = 0
-        max_scrolls = max(count // 3, 30)  # 最多滚动次数
-        scroll_count = 0
+        def _navigate_and_dismiss(target_url: str) -> bool:
+            """导航到目标页面并处理登录弹窗，返回 True 表示弹窗已处理完毕"""
+            self.page.get(target_url)
+            time.sleep(5)
+            if self._is_login_modal_shown():
+                print("[Crawler] [Search] 检测到登录弹窗，尝试关闭...")
+                if self._close_login_modal():
+                    time.sleep(2)
+                    if self._is_login_modal_shown():
+                        print("[Crawler] [Search] 关闭弹窗后仍在，尝试先暖启动 session...")
+                        # 先去首页或 explore 页暖一下 session
+                        for warmup_url in [
+                            "https://www.xiaohongshu.com/explore",
+                            "https://www.xiaohongshu.com",
+                        ]:
+                            self.page.get(warmup_url)
+                            time.sleep(3)
+                            self._close_login_modal()
+                            time.sleep(1)
+                            if not self._is_login_modal_shown():
+                                print(f"[Crawler] [Search] {warmup_url} 暖启动成功")
+                                # 重新导航到目标
+                                self.page.get(target_url)
+                                time.sleep(5)
+                                self._close_login_modal()
+                                time.sleep(1)
+                                break
+                else:
+                    print("[Crawler] [Search] [WARN] 无法关闭登录弹窗，cookie 可能已过期")
+            return self._is_login_modal_shown()
 
-        while len(notes) < count and no_new < 10 and scroll_count < max_scrolls:
-            self.page.scroll.to_bottom()
-            scroll_count += 1
-            time.sleep(random.uniform(1.5, 3.0))
+        # 第一步：导航 + 处理弹窗
+        login_still_shown = _navigate_and_dismiss(url)
 
-            # 获取当前页面的笔记卡片 — 尝试多种选择器
-            cards = []
-            for selector in [
-                "css:section.note-item",
-                "css:div.note-item",
-                "css:a[href*='/explore/']",
-                "css:.feeds-page a[href*='/explore/']",
-                "css:a[href*='/search_result/']",
-            ]:
-                try:
-                    found = self.page.eles(selector)
-                    if found:
-                        cards.extend(found)
-                        break
-                except Exception:
-                    continue
+        if login_still_shown:
+            print("[Crawler] [Search] [WARN] 登录弹窗持续存在，请重新登录")
+            print("[Crawler] [Search] 已登录状态可能已过期，建议运行: uv run python src/real_crawler.py")
+            # 即使弹窗还在，也尝试抓取（可能弹窗背后有内容）
 
-            for card in cards:
-                try:
-                    href = card.attr("href") or ""
-                    if "/explore/" not in href:
-                        continue
-                    note_id = href.split("/explore/")[-1].split("?")[0]
-                    if any(n["id"] == note_id for n in notes):
-                        continue
+        # ===== 策略 A (首选): 用浏览器 fetch() 直接调搜索 API =====
+        print("[Crawler] [Search] 尝试 API 搜索...")
+        try:
+            api_notes_raw = self.page.run_js(f"""
+                (async () => {{
+                    const url = 'https://edith.xiaohongshu.com/api/sns/web/v1/search/notes?' +
+                        'keyword=' + encodeURIComponent('{keyword}') +
+                        '&page=1&page_size={min(count, 50)}&sort=general';
+                    const resp = await fetch(url, {{
+                        credentials: 'include',
+                        headers: {{ 'accept': 'application/json' }},
+                    }});
+                    const data = await resp.json();
+                    const items = data?.data?.items || [];
+                    return JSON.stringify(items.map(item => {{
+                        const note = item.note_card || item;
+                        const id = item.id || note.note_id || '';
+                        const title = (note.display_title || note.title || '').slice(0, 100);
+                        const interact = note.interact_info || {{}};
+                        const likes = parseInt(interact.liked_count || 0);
+                        const user = (item.user || note.user || {{}});
+                        const author = user.nickname || user.nick_name || '';
+                        return {{ id, title, likes, author }};
+                    }}));
+                }})()
+            """)
 
-                    # 尝试获取标题
-                    title = ""
-                    try:
-                        for title_sel in ["css:.title", "css:.note-title", "css:span.title", "css:a.title"]:
-                            title_el = card.ele(title_sel)
-                            if title_el:
-                                title = title_el.text.strip()
-                                if title:
-                                    break
-                    except Exception:
-                        pass
-
-                    if not title:
-                        # 从卡片文本中取第一行作为标题
-                        try:
-                            title = card.text.split("\n")[0][:50]
-                        except Exception:
-                            title = f"{keyword}_{note_id[:8]}"
-
-                    notes.append({
-                        "id": note_id,
-                        "title": title or f"{keyword}_{note_id[:8]}",
-                        "url": f"https://www.xiaohongshu.com/explore/{note_id}",
-                    })
-                except Exception:
-                    continue
-
-            if len(notes) == last_count:
-                no_new += 1
+            if api_notes_raw and isinstance(api_notes_raw, str) and api_notes_raw.startswith("["):
+                api_items = json.loads(api_notes_raw)
+                seen_ids = set()
+                for item in api_items:
+                    nid = item.get("id", "")
+                    if nid and nid not in seen_ids:
+                        seen_ids.add(nid)
+                        notes.append({
+                            "id": nid,
+                            "title": item.get("title", f"{keyword}_{nid[:8]}"),
+                            "url": f"https://www.xiaohongshu.com/explore/{nid}",
+                            "likes": item.get("likes", 0),
+                            "author": item.get("author", ""),
+                        })
+                print(f"[Crawler] [Search] [OK] API 搜索到 {len(notes)} 篇笔记")
             else:
-                no_new = 0
-            last_count = len(notes)
-            print(f"\r[Crawler]   已发现 {len(notes)} 篇...", end="")
+                print(f"[Crawler] [Search] [WARN] API 返回异常: {str(api_notes_raw)[:100]}")
+        except Exception as e:
+            print(f"[Crawler] [Search] API 搜索失败: {e}")
+
+        # ===== 策略 B (兜底): 页面滚动 + HTML 正则 =====
+        if not notes:
+            print("[Crawler] [Search] API 无结果，退回到页面解析...")
+            no_new = 0
+            last_count = 0
+            max_scrolls = max(count // 3, 30)
+            scroll_count = 0
+
+            while len(notes) < count and no_new < 10 and scroll_count < max_scrolls:
+                self.page.scroll.to_bottom()
+                scroll_count += 1
+                time.sleep(random.uniform(1.5, 3.0))
+
+                page_html = self.page.html or ""
+                hex_ids = re.findall(r'/explore/([a-f0-9]{24})', page_html)
+                if hex_ids:
+                    seen_ids = {n["id"] for n in notes}
+                    for note_id in hex_ids:
+                        if note_id not in seen_ids:
+                            seen_ids.add(note_id)
+                            notes.append({
+                                "id": note_id,
+                                "title": f"{keyword}_{note_id[:8]}",
+                                "url": f"https://www.xiaohongshu.com/explore/{note_id}",
+                            })
+                    no_new = 0
+                    last_count = len(notes)
+                else:
+                    no_new += 1
+                last_count = len(notes)
+                print(f"\r[Crawler]   已发现 {len(notes)} 篇...", end="")
 
         print(f"\n[Crawler] [OK] 搜索完成，共 {len(notes[:count])} 篇笔记")
+
+        # 如果一篇都没找到且有登录弹窗 → 需要重新登录
+        if not notes and self._is_login_modal_shown():
+            self._need_relogin = True
+            print("[Crawler] [Search] [WARN] 搜索到 0 篇笔记 + 登录弹窗 -> cookie 过期，需要重新登录")
+        else:
+            self._need_relogin = False
+
         return notes[:count]
 
+    def _is_note_page_blocked(self) -> bool:
+        """检测笔记页是否被「扫码查看」拦截"""
+        try:
+            page_text = self.page.text or ""
+            blocked_keywords = [
+                "暂时无法浏览", "请打开小红书App扫码查看", "扫码查看",
+                "小红书如何扫码", "问题反馈", "返回首页",
+            ]
+            matches = sum(1 for kw in blocked_keywords if kw in page_text)
+            return matches >= 3  # 匹配到 3 个以上关键词才判定为被拦截
+        except Exception:
+            return False
+
+    def _try_fetch_via_api(self, note_id: str) -> dict:
+        """通过小红书内部 API 获取笔记内容（浏览器 fetch + cookies 自动携带）"""
+        result = {"content": "", "likes": 0, "author": ""}
+        try:
+            js = f"""
+            (async () => {{
+                try {{
+                    const resp = await fetch(
+                        'https://edith.xiaohongshu.com/api/sns/web/v1/feed?source_note_id={note_id}',
+                        {{ credentials: 'include', headers: {{ 'accept': 'application/json' }} }}
+                    );
+                    const data = await resp.json();
+                    const items = data?.data?.items || [];
+                    if (!items.length) return 'NO_DATA';
+                    const card = items[0].note_card || {{}};
+                    const interact = card.interact_info || {{}};
+                    const user = (items[0].user || card.user || {{}});
+                    return JSON.stringify({{
+                        content: card.desc || '',
+                        likes: parseInt(interact.liked_count || interact.likedCount || 0),
+                        author: user.nickname || user.nickName || '',
+                    }});
+                }} catch(e) {{ return 'FETCH_ERR: ' + e.message; }}
+            }})()
+            """
+            raw = self.page.run_js(js)
+            import json
+            if raw and raw.startswith('{'):
+                data = json.loads(raw)
+                result.update(data)
+                print(f"        [API] [OK] 获取内容成功（{len(result['content'])} 字符，{result['likes']} 赞）")
+            elif raw and 'NO_DATA' in str(raw):
+                print(f"        [API] [WARN] API 返回空数据")
+            else:
+                print(f"        [API] [WARN] 失败: {str(raw)[:80]}")
+        except Exception as e:
+            print(f"        [API] [WARN] 异常: {e}")
+
+        return result
+
     def get_note_detail(self, note: dict) -> dict:
-        """获取单篇笔记的正文内容"""
+        """获取单篇笔记的正文内容 — API 优先"""
         title_short = note.get('title', '')[:30]
+        note_id = note.get("id", "")
         print(f"[Crawler] [Page] {title_short}...")
+
+        # ===== 策略 A: API fetch() 直接拿（最快最稳） =====
+        api_result = self._try_fetch_via_api(note_id)
+        if api_result["content"]:
+            note["content"] = api_result["content"]
+            note["likes"] = api_result.get("likes", 0) or note.get("likes", 0)
+            note["author"] = api_result.get("author", "") or note.get("author", "")
+            return note
+
+        # ===== 策略 B: 浏览器打开笔记页 + 关闭弹窗 =====
         try:
             self.page.get(note["url"])
             time.sleep(random.uniform(2.0, 4.0))
+            if self._is_login_modal_shown():
+                self._close_login_modal()
+                time.sleep(1)
+            blocked = self._is_note_page_blocked()
+            if blocked:
+                print(f"        [WARN] 被拦截，放弃此篇")
+                note["content"] = note.get("content", "")
+                note["likes"] = note.get("likes", 0)
+                note["author"] = note.get("author", "")
+                return note
 
             # 获取正文
             content = ""
@@ -328,7 +599,6 @@ class XHSCrawler:
                 except Exception:
                     continue
 
-            # 获取点赞数
             likes = 0
             try:
                 for like_sel in ["css:.like-wrapper .count", "css:.like .count",
@@ -340,7 +610,6 @@ class XHSCrawler:
             except Exception:
                 pass
 
-            # 获取作者
             author = ""
             try:
                 for author_sel in ["css:.username", "css:.author-name", "css:.name"]:
@@ -363,12 +632,78 @@ class XHSCrawler:
 
         return note
 
-    def get_comments(self, note: dict, max_comments: int = 30) -> list[str]:
-        """获取笔记的评论"""
+    def _try_fetch_comments_via_api(self, note_id: str) -> list[str]:
+        """通过 API 获取评论（不依赖页面渲染）"""
+        try:
+            js = f"""
+            (async () => {{
+                const allComments = [];
+                let cursor = '';
+                for (let i = 0; i < 3; i++) {{
+                    const url = 'https://edith.xiaohongshu.com/api/sns/web/v2/comment/page?' +
+                        'note_id={note_id}&cursor=' + cursor + '&top_size=10&image_formats=jpg';
+                    const resp = await fetch(url, {{
+                        credentials: 'include',
+                        headers: {{ 'accept': 'application/json' }},
+                    }});
+                    const data = await resp.json();
+                    const commentList = data?.data?.comments || [];
+                    for (const c of commentList) {{
+                        allComments.push(c.content || '');
+                        for (const sc of (c.sub_comments || [])) {{
+                            allComments.push(sc.content || '');
+                        }}
+                    }}
+                    cursor = data?.data?.cursor || '';
+                    if (!cursor || !data?.data?.has_more) break;
+                }}
+                return JSON.stringify(allComments);
+            }})()
+            """
+            raw = self.page.run_js(js)
+            if raw and raw.startswith('['):
+                comments = json.loads(raw)
+                print(f"        [API] [OK] 评论 API 获取到 {len(comments)} 条")
+                return comments
+        except Exception as e:
+            print(f"        [API] [WARN] 评论 API 失败: {e}")
+        return []
+
+    def get_comments(self, note: dict, max_comments: int = 30, level: str = "all") -> list[str]:
+        """
+        获取笔记的评论 — API 优先。
+
+        Args:
+            note: 笔记数据（含 url）
+            max_comments: 最大评论数
+            level: 评论层级
+                "all"  — 抓取所有评论（一级 + 回复，混在一起）
+                "top"  — 只抓一级评论（直接评论笔记的，不含回复）
+                "hot"  — 只抓热评（按热度排序的前几条）
+
+        Returns:
+            评论文本列表
+        """
+        note_id = note.get("id", "")
+
+        # ===== 策略 A: API 获取 =====
+        api_comments = self._try_fetch_comments_via_api(note_id)
+        if api_comments:
+            if level == "hot":
+                return api_comments[:max(5, max_comments // 3)]
+            elif level == "top":
+                return api_comments[:max_comments]  # API 返回的顶级在前
+            return api_comments[:max_comments]
+
+        # ===== 策略 B: 页面抓取（兜底） =====
         comments = []
         try:
             self.page.get(note["url"])
             time.sleep(3)
+            # 检查登录弹窗
+            if self._is_login_modal_shown():
+                self._close_login_modal()
+                time.sleep(1)
 
             # 滚动评论区
             for _ in range(min(max_comments // 5 + 1, 15)):
@@ -378,18 +713,80 @@ class XHSCrawler:
                     pass
                 time.sleep(random.uniform(1.0, 2.0))
 
-            # 提取评论 — 尝试多种选择器
+            # ===== 策略 1: 先用特定选择器抓取 =====
+            if level == "top":
+                # 只抓一级评论：尝试 direct-child 选择器 + 排除嵌套
+                selectors = [
+                    "css:.comment-list > .comment-item > .content",
+                    "css:.comments-wrapper > .comment-item > .content",
+                    "css:.note-scroller > .comment-item > .content",
+                    "css:.comment-item > .content",           # 兜底：所有 comment-item 的直接子 content
+                ]
+            elif level == "hot":
+                # 热评：通常排在前几条，只取前 1/3
+                selectors = [
+                    "css:.comment-list > .comment-item > .content",
+                    "css:.comments-wrapper > .comment-item > .content",
+                    "css:.note-scroller > .comment-item > .content",
+                    "css:.comment-item > .content",
+                ]
+            else:
+                # 全部评论（原有行为）
+                selectors = [
+                    "css:.comment-item .content",
+                    "css:.comment-content",
+                    "css:.comments .content",
+                    "css:.note-comment .content",
+                ]
+
             comment_els = []
-            for sel in ["css:.comment-item .content", "css:.comment-content",
-                        "css:.comments .content", "css:.note-comment .content"]:
+            for sel in selectors:
                 try:
                     found = self.page.eles(sel)
                     if found:
                         comment_els = found
+                        print(f"[Crawler] [Comments] 使用选择器: {sel} → {len(found)} 个元素")
                         break
                 except Exception:
                     continue
 
+            # ===== 策略 2: 如果特定选择器没找到，退回到全量 + 过滤 =====
+            if not comment_els:
+                # 全量抓取
+                for sel in [
+                    "css:.comment-item .content", "css:.comment-content",
+                    "css:.comments .content", "css:.note-comment .content",
+                ]:
+                    try:
+                        found = self.page.eles(sel)
+                        if found:
+                            comment_els = found
+                            break
+                    except Exception:
+                        continue
+
+                # 如果只想要一级评论，尝试从 DOM 结构判断是否为嵌套
+                if level in ("top", "hot") and comment_els:
+                    filtered = []
+                    for el in comment_els:
+                        try:
+                            # 检查父元素是否有嵌套标记
+                            parent = el.parent()
+                            parent_classes = parent.attr("class") or "" if parent else ""
+                            grandparent = parent.parent() if parent else None
+                            gp_classes = grandparent.attr("class") or "" if grandparent else ""
+                            # 如果父/祖父元素包含 reply/sub/child 关键词，跳过
+                            if any(k in parent_classes.lower() for k in ["reply", "sub", "child", "二级"]):
+                                continue
+                            if any(k in gp_classes.lower() for k in ["reply", "sub", "child", "二级"]):
+                                continue
+                            filtered.append(el)
+                        except Exception:
+                            filtered.append(el)
+                    print(f"[Crawler] [Comments] DOM 过滤后: {len(filtered)}/{len(comment_els)} 条一级评论")
+                    comment_els = filtered
+
+            # 提取文本
             for el in comment_els:
                 try:
                     text = el.text.strip()
@@ -398,7 +795,11 @@ class XHSCrawler:
                 except Exception:
                     continue
 
-            print(f"[Crawler] [Comments] 获取到 {len(comments[:max_comments])} 条评论")
+            # 热评模式：只取前 1/3（按页面排序，热评在前）
+            if level == "hot":
+                comments = comments[:max(5, max_comments // 3)]
+
+            print(f"[Crawler] [Comments] 获取到 {len(comments[:max_comments])} 条评论 (level={level})")
         except Exception as e:
             print(f"        [WARN] 评论获取失败: {e}")
 
@@ -520,8 +921,15 @@ class XHSCrawler:
 
         return complaints, purchase_intents, comparison_mentions, high_freq
 
-    def crawl(self, category: str, count: int = 30, with_comments: bool = True):
-        """完整抓取流程"""
+    def crawl(self, category: str, count: int = 30, with_comments: bool = True, comment_level: str = "all"):
+        """完整抓取流程
+
+        Args:
+            category: 品类名称
+            count: 抓取篇数
+            with_comments: 是否抓评论
+            comment_level: 评论层级 ("all" / "top" / "hot")
+        """
         if not self._logged_in:
             msg = ("[Crawler] [FAIL] 未登录，无法抓取\n"
                    "[Crawler] [Hint] 本地: uv run python src/real_crawler.py \"品类名\" 登录\n"
@@ -535,30 +943,62 @@ class XHSCrawler:
         print(f"[Crawler] [Crawl]  开始抓取: {category}")
         print(f"{'='*60}")
 
-        # 1. 搜索笔记
-        notes = self.search(category, count)
+        # 1. 搜索笔记（如发现需重新登录，自动触发一次登录后重试）
+        MAX_RETRIES = 1
+        for attempt in range(MAX_RETRIES + 1):
+            notes = self.search(category, count)
+            if notes:
+                break  # 找到笔记 → 继续
+
+            if not self._need_relogin:
+                # 不是因为登录弹窗导致的空结果 → 不重试
+                break
+
+            print(f"\n[Crawler] [Crawl] [RETRY] cookie 已过期，尝试重新登录（第{attempt+1}次）...")
+            self._logged_in = False  # 强制设为未登录态
+            if not self._is_cloud:
+                if not self.login_interactive():
+                    print("[Crawler] [FAIL] 重新登录失败")
+                    return 0
+                print("[Crawler] [OK] 重新登录成功，重新搜索...")
+            else:
+                print("[Crawler] [FAIL] 云端模式下 cookie 过期，请更新 Streamlit Secrets XHS_COOKIES")
+                return 0
+
         if not notes:
             print("[Crawler] [FAIL] 无搜索结果")
             return 0
 
         # 2. 逐篇抓取详情 + 评论
         saved = 0
+        print(f"\n[Crawler] [Crawl] 搜索到 {len(notes)} 篇笔记，开始逐篇抓取详情...")
         for i, note in enumerate(notes):
             print(f"\n[Crawler] [{i+1}/{len(notes)}] {note.get('title', '')[:40]}")
 
-            note = self.get_note_detail(note)
-            comments = None
-            if with_comments:
-                comments = self.get_comments(note)
+            try:
+                note = self.get_note_detail(note)
+                comments = None
+                if with_comments:
+                    comments = self.get_comments(note, level=comment_level)
 
-            self.save_note(note, category, comments)
-            saved += 1
+                self.save_note(note, category, comments)
+                saved += 1
 
-            # 随机间隔，避免被封
-            if i < len(notes) - 1:
-                delay = random.uniform(3.0, 6.0)
-                print(f"        [Wait] {delay:.0f}s...")
-                time.sleep(delay)
+                # 随机间隔，避免被封
+                if i < len(notes) - 1:
+                    delay = random.uniform(3.0, 6.0)
+                    print(f"        [Wait] {delay:.0f}s...")
+                    time.sleep(delay)
+            except Exception as e:
+                print(f"        [ERR] 处理笔记失败: {e}")
+                import traceback
+                traceback.print_exc()
+                # 尝试保存一个基础版本
+                try:
+                    self.save_note(note, category, [])
+                    saved += 1
+                except Exception:
+                    pass
 
         print(f"\n[Crawler] [OK] 完成！共保存 {saved} 篇笔记 → {RAW_DIR}")
         return saved
@@ -658,7 +1098,7 @@ class XHSCrawler:
                             # 清理：去掉数字前缀、热度标记等
                             import re as re_mod
                             kw = re_mod.sub(r'^\d+[\.\、\)\s]*', '', kw)
-                            kw = re_mod.sub(r'\s*(热|新|荐|🔥|📈|HOT|爆)$', '', kw)
+                            kw = re_mod.sub(r'\s*(热|新|荐|HOT|爆)$', '', kw)
                             kw = kw.strip()
 
                             if not kw or len(kw) < 2 or len(kw) > 25:

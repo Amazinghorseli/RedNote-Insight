@@ -1,19 +1,20 @@
 """
-streamlit_app.py — Streamlit Cloud 部署入口 (v2.0)
-====================================================
-保留修复：st.session_state 初始化（避开了 @st.cache_resource 的 DOM bug）
-恢复经典 UI：st.chat_message + st.chat_input 对话气泡风格
+streamlit_app.py — 小红书爆款雷达 v3.0
+========================================
+对标原版 FastAPI 前端：灵感库 + 发现机会(双报告) + 问答 + 导入
 """
 import streamlit as st
 import sys
 import os
+import time
+import re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 st.set_page_config(page_title="小红书爆款雷达", page_icon="🎯", layout="wide")
 
 # ============================================================
-# 初始化 AppState（无任何 Streamlit UI 元素）
+# 初始化 AppState
 # ============================================================
 if "app_state" not in st.session_state:
     from src.core.state import AppState
@@ -30,11 +31,9 @@ if not _state.is_ready:
     st.info("请检查 API Key 是否有效，或联系开发者。")
     st.stop()
 
-st.title("🎯 小红书爆款雷达")
-st.caption("翻评论 · 找痛点 · 定方向 — AI 选品洞察引擎")
 
 # ============================================================
-# 重建索引
+# 工具函数
 # ============================================================
 def rebuild_indexes():
     _state.rebuild_sync()
@@ -42,38 +41,134 @@ def rebuild_indexes():
 
 
 # ============================================================
-# 自动抓取工具
+# 热榜/灵感库数据
 # ============================================================
-def _auto_fetch(keyword: str, count: int = 30) -> int:
-    from src.crawler import CrawlerInterface
-    cookies_json = ""
-    try:
-        cookies_json = st.secrets.get("XHS_COOKIES", "")
-    except Exception:
-        pass
-    crawler = CrawlerInterface(raw_dir=_state.raw_dir, cookies_json=cookies_json)
-    if not crawler.is_available:
-        return 0
-    result = crawler.crawl(keyword, count=count)
-    c = result["count"]
-    if c > 0:
-        rebuild_indexes()
-    return c
-
-
-def _should_fetch(answer: str) -> bool:
-    triggers = ["无法回答", "根据现有资料", "无法找到", "抱歉", "没有找到",
-                 "暂无相关文档", "知识库中暂无"]
-    return any(t in answer for t in triggers)
+@st.cache_data(ttl=300)
+def get_trending_keywords() -> list:
+    """从内置词库获取热榜关键词"""
+    hot_kw = [
+        # 🏠 家居日用 (20)
+        {"keyword": "磁吸感应灯", "category": "家居", "trend": "up"},
+        {"keyword": "桌面收纳", "category": "家居", "trend": "up"},
+        {"keyword": "收纳盒", "category": "家居", "trend": "stable"},
+        {"keyword": "装饰画", "category": "家居", "trend": "up"},
+        {"keyword": "香薰", "category": "家居", "trend": "up"},
+        {"keyword": "地毯", "category": "家居", "trend": "stable"},
+        {"keyword": "窗帘", "category": "家居", "trend": "stable"},
+        {"keyword": "抱枕", "category": "家居", "trend": "stable"},
+        {"keyword": "花瓶", "category": "家居", "trend": "up"},
+        {"keyword": "挂钟", "category": "家居", "trend": "stable"},
+        {"keyword": "台灯", "category": "家居", "trend": "up"},
+        {"keyword": "落地灯", "category": "家居", "trend": "up"},
+        {"keyword": "沙发垫", "category": "家居", "trend": "stable"},
+        {"keyword": "门帘", "category": "家居", "trend": "up"},
+        {"keyword": "墙面置物架", "category": "家居", "trend": "up"},
+        {"keyword": "冰箱贴", "category": "家居", "trend": "up"},
+        {"keyword": "杯垫", "category": "家居", "trend": "stable"},
+        {"keyword": "家居拖鞋", "category": "家居", "trend": "stable"},
+        {"keyword": "衣架", "category": "家居", "trend": "up"},
+        {"keyword": "收纳柜", "category": "家居", "trend": "up"},
+        # 👗 服饰 (15)
+        {"keyword": "健身服", "category": "服饰", "trend": "up"},
+        {"keyword": "风衣", "category": "服饰", "trend": "seasonal"},
+        {"keyword": "瑜伽裤", "category": "服饰", "trend": "up"},
+        {"keyword": "冲锋衣", "category": "服饰", "trend": "up"},
+        {"keyword": "防晒衣", "category": "服饰", "trend": "up"},
+        {"keyword": "阔腿裤", "category": "服饰", "trend": "up"},
+        {"keyword": "针织衫", "category": "服饰", "trend": "seasonal"},
+        {"keyword": "卫衣", "category": "服饰", "trend": "stable"},
+        {"keyword": "羽绒服", "category": "服饰", "trend": "seasonal"},
+        {"keyword": "连衣裙", "category": "服饰", "trend": "stable"},
+        {"keyword": "真丝睡衣", "category": "服饰", "trend": "up"},
+        {"keyword": "袜子", "category": "服饰", "trend": "stable"},
+        {"keyword": "打底衫", "category": "服饰", "trend": "stable"},
+        {"keyword": "运动鞋", "category": "服饰", "trend": "up"},
+        {"keyword": "棒球帽", "category": "服饰", "trend": "up"},
+        # 🍜 食品 (10)
+        {"keyword": "辣条", "category": "食品", "trend": "stable"},
+        {"keyword": "养生茶", "category": "食品", "trend": "up"},
+        {"keyword": "即食早餐", "category": "食品", "trend": "up"},
+        {"keyword": "代餐奶昔", "category": "食品", "trend": "up"},
+        {"keyword": "低卡零食", "category": "食品", "trend": "up"},
+        {"keyword": "坚果礼盒", "category": "食品", "trend": "stable"},
+        {"keyword": "速溶咖啡", "category": "食品", "trend": "stable"},
+        {"keyword": "冻干水果", "category": "食品", "trend": "up"},
+        {"keyword": "牛肉干", "category": "食品", "trend": "stable"},
+        {"keyword": "奶酪棒", "category": "食品", "trend": "up"},
+        # 💄 美妆个护 (15)
+        {"keyword": "素颜霜", "category": "美妆", "trend": "up"},
+        {"keyword": "护发精油", "category": "个护", "trend": "up"},
+        {"keyword": "补水面膜", "category": "美妆", "trend": "stable"},
+        {"keyword": "磨砂膏", "category": "个护", "trend": "up"},
+        {"keyword": "防晒霜", "category": "美妆", "trend": "up"},
+        {"keyword": "眼线笔", "category": "美妆", "trend": "stable"},
+        {"keyword": "气垫粉底", "category": "美妆", "trend": "up"},
+        {"keyword": "卸妆油", "category": "美妆", "trend": "stable"},
+        {"keyword": "身体乳", "category": "个护", "trend": "stable"},
+        {"keyword": "洗发水", "category": "个护", "trend": "stable"},
+        {"keyword": "脱毛仪", "category": "个护", "trend": "up"},
+        {"keyword": "美容仪", "category": "个护", "trend": "up"},
+        {"keyword": "美瞳", "category": "美妆", "trend": "stable"},
+        {"keyword": "睫毛膏", "category": "美妆", "trend": "stable"},
+        {"keyword": "口红", "category": "美妆", "trend": "stable"},
+        # 📱 数码 (10)
+        {"keyword": "蓝牙耳机", "category": "数码", "trend": "stable"},
+        {"keyword": "手机壳", "category": "数码", "trend": "stable"},
+        {"keyword": "充电宝", "category": "数码", "trend": "stable"},
+        {"keyword": "数据线", "category": "数码", "trend": "up"},
+        {"keyword": "平板支架", "category": "数码", "trend": "up"},
+        {"keyword": "无线鼠标", "category": "数码", "trend": "stable"},
+        {"keyword": "键盘", "category": "数码", "trend": "up"},
+        {"keyword": "屏幕挂灯", "category": "数码", "trend": "up"},
+        {"keyword": "手机支架", "category": "数码", "trend": "stable"},
+        {"keyword": "充电头", "category": "数码", "trend": "up"},
+        # 🐱 宠物 (8)
+        {"keyword": "宠物零食", "category": "宠物", "trend": "up"},
+        {"keyword": "猫抓板", "category": "宠物", "trend": "stable"},
+        {"keyword": "猫砂", "category": "宠物", "trend": "stable"},
+        {"keyword": "狗狗玩具", "category": "宠物", "trend": "up"},
+        {"keyword": "宠物背包", "category": "宠物", "trend": "up"},
+        {"keyword": "宠物衣服", "category": "宠物", "trend": "up"},
+        {"keyword": "自动喂食器", "category": "宠物", "trend": "up"},
+        {"keyword": "宠物饮水机", "category": "宠物", "trend": "up"},
+        # 🏃 运动健身 (8)
+        {"keyword": "运动水壶", "category": "运动", "trend": "up"},
+        {"keyword": "瑜伽垫", "category": "运动", "trend": "stable"},
+        {"keyword": "跳绳", "category": "运动", "trend": "up"},
+        {"keyword": "弹力带", "category": "运动", "trend": "up"},
+        {"keyword": "运动手套", "category": "运动", "trend": "up"},
+        {"keyword": "速干毛巾", "category": "运动", "trend": "up"},
+        {"keyword": "筋膜枪", "category": "运动", "trend": "up"},
+        {"keyword": "护膝", "category": "运动", "trend": "stable"},
+        # 🧸 潮玩/文创 (8)
+        {"keyword": "盲盒", "category": "潮玩", "trend": "up"},
+        {"keyword": "手账本", "category": "文创", "trend": "up"},
+        {"keyword": "贴纸", "category": "文创", "trend": "stable"},
+        {"keyword": "印章", "category": "文创", "trend": "up"},
+        {"keyword": "水彩笔", "category": "文创", "trend": "stable"},
+        {"keyword": "解压玩具", "category": "潮玩", "trend": "up"},
+        {"keyword": "拼图", "category": "潮玩", "trend": "up"},
+        {"keyword": "手工材料包", "category": "文创", "trend": "up"},
+        # 🚗 汽车/出行 (6)
+        {"keyword": "车载香薰", "category": "汽车", "trend": "up"},
+        {"keyword": "车载手机架", "category": "汽车", "trend": "stable"},
+        {"keyword": "临时停车牌", "category": "汽车", "trend": "stable"},
+        {"keyword": "遮阳挡", "category": "汽车", "trend": "seasonal"},
+        {"keyword": "安全锤", "category": "汽车", "trend": "stable"},
+        {"keyword": "汽车脚垫", "category": "汽车", "trend": "stable"},
+    ]
+    return hot_kw
 
 
 # ============================================================
-# 洞察管道（流式，适配 st.write_stream）
+# 选品分析管道
 # ============================================================
-def run_insight_stream(query: str):
+def run_insight_analysis(query: str) -> str:
+    """运行选品分析 + 达人推荐，返回两段报告"""
     from src.agents.comment_agent import CommentAnalyzer
     from src.agents.demand_agent import DemandAggregator
     from src.agents.insight_agent import InsightGenerator
+    from src.agents.creator_agent import CreatorGenerator
     from src.config import RERANKER_THRESHOLD
 
     MIN_NOTES = 10
@@ -81,49 +176,82 @@ def run_insight_stream(query: str):
     reranker = _state.reranker
     raw_dir = _state.raw_dir
 
-    def _do_insight(docs, category):
-        analyzer = CommentAnalyzer(raw_dir=raw_dir)
-        analyses = analyzer.analyze(docs)
-        if not analyses:
-            yield "没有找到评论分析数据。"
-            return
-        aggregator = DemandAggregator()
-        aggregated = aggregator.aggregate(analyses)
-        gen = InsightGenerator()
-        try:
-            yield from gen.generate_stream(aggregated, category=category)
-        except Exception as e:
-            yield gen.generate_fallback(aggregated, category=category) + f"\n\n（LLM 降级为模板。错误：{e}）"
-
+    # 检索
     docs = hr.hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES) or []
-    scores = reranker.rerank(query, docs) if docs else []
+    if not docs:
+        return "选品报告：暂无相关数据。", "达人推荐：暂无相关数据。"
+
+    scores = reranker.rerank(query, docs)
     relevant = [d for d, s in zip(docs, scores) if s >= RERANKER_THRESHOLD]
+    if len(relevant) < 3:
+        return "选品报告：相关数据不足（少于3篇）。", "达人推荐：相关数据不足。"
 
-    if len(relevant) >= 3:
-        yield from _do_insight(relevant, query)
-        return
+    # 分析
+    analyzer = CommentAnalyzer(raw_dir=raw_dir)
+    analyses = analyzer.analyze(relevant)
+    if not analyses:
+        return "选品报告：无法分析评论数据。", "达人推荐：无法分析。"
 
-    yield f"📊 知识库中「{query}」相关数据较少（{len(relevant)} 篇），正在自动抓取...\n\n"
-    c = _auto_fetch(query, count=30)
-    if c == 0:
-        yield (f"无法获取「{query}」的数据。\n\n"
-               f"💡 请先在命令行运行:\n`uv run python src/real_crawler.py \"{query}\"`\n"
-               f"或配置 Streamlit Secrets → XHS_COOKIES")
-        return
+    aggregator = DemandAggregator()
+    aggregated = aggregator.aggregate(analyses)
 
-    yield f"（📥 已从小红书抓取 {c} 篇真实笔记）\n\n"
-    import time; time.sleep(0.5)
-    fresh = _state.hybrid_retriever.hybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
-    fresh_scores = reranker.rerank(query, fresh) if fresh else []
-    fresh_rel = [d for d, s in zip(fresh, fresh_scores) if s >= RERANKER_THRESHOLD]
-    if not fresh_rel:
-        yield f"已抓取 {c} 篇但未匹配到相关内容，请稍后重试。"
-        return
-    yield from _do_insight(fresh_rel, query)
+    # 生成两套报告
+    try:
+        selection = InsightGenerator()
+        sel_report = selection.generate_fallback(aggregated, category=query)
+    except Exception as e:
+        sel_report = f"选品报告生成失败：{e}"
+
+    try:
+        creator = CreatorGenerator()
+        creator_report = creator.generate_fallback(aggregated, category=query)
+    except Exception as e:
+        creator_report = f"达人推荐生成失败：{e}"
+
+    return sel_report, creator_report
 
 
 # ============================================================
-# QA 管道
+# 导入笔记（粘贴链接）
+# ============================================================
+def import_note_by_url(note_url: str, category: str) -> dict:
+    """通过粘贴的小红书笔记链接导入单篇"""
+    note_id = ""
+    if "/explore/" in note_url:
+        note_id = note_url.split("/explore/")[-1].split("?")[0].split("/")[0]
+    elif "/a/" in note_url:
+        note_id = note_url.split("/a/")[-1].split("?")[0].split("/")[0]
+
+    if not note_id or len(note_id) < 20:
+        return {"success": False, "error": f"无法从链接中提取笔记ID: {note_url}"}
+
+    try:
+        from src.real_crawler import XHSCrawler
+        crawler = XHSCrawler()
+        if not crawler.is_logged_in:
+            crawler.close()
+            return {"success": False, "error": "未登录，请先扫码登录后再导入"}
+    except Exception as e:
+        return {"success": False, "error": f"爬虫初始化失败: {e}"}
+
+    note = {"id": note_id, "title": f"{category}_{note_id[:8]}", "url": f"https://www.xiaohongshu.com/explore/{note_id}"}
+    try:
+        note = crawler.get_note_detail(note)
+        comments = crawler.get_comments(note, max_comments=30)
+        path = crawler.save_note(note, category, comments)
+        crawler.close()
+        rebuild_indexes()
+        return {"success": True, "path": path, "content_len": len(note.get("content", "")), "comments": len(comments or [])}
+    except Exception as e:
+        try:
+            crawler.close()
+        except Exception:
+            pass
+        return {"success": False, "error": str(e)}
+
+
+# ============================================================
+# 智能问答
 # ============================================================
 def run_qa(query: str) -> str:
     from src.config import RERANKER_THRESHOLD
@@ -148,19 +276,87 @@ def run_qa(query: str) -> str:
 
 
 # ============================================================
-# 侧边栏
+# UI
 # ============================================================
+st.title("🎯 小红书爆款雷达")
+st.caption("选品洞察 · 达人选题 · AI 问答")
+
+# ===== 侧边栏导航 =====
 with st.sidebar:
-    mode = st.radio("运行模式", ["问答模式", "洞察模式", "🕷️ 抓取数据"], index=0)
+    st.markdown("## 🎯 选品雷达")
+    st.caption("小红书选品 · 机会评分 · 执行清单")
+
+    tabs = ["💡 灵感库", "🎯 发现机会", "💬 智能问答", "📥 导入数据"]
+    selected_tab = st.radio("导航", tabs, index=1, label_visibility="collapsed")
+
     st.markdown("---")
-    st.caption(f"📊 {_state.stats['total_chunks']} 个 chunk · {_state.stats['total_notes']} 篇笔记"
-               + (f" · 🆕 有新数据" if st.session_state.data_version > 0 else ""))
+    st.caption(f"📊 {_state.stats['total_chunks']} chunk · {_state.stats['total_notes']} 笔记")
 
 # ============================================================
-# 问答模式（经典 chat_message + chat_input 风格）
+# 💡 灵感库
 # ============================================================
-if mode == "问答模式":
+if selected_tab == "💡 灵感库":
+    st.subheader("💡 灵感库")
+    st.caption("不知道搜什么？按品类浏览精选方向，点一下就出双报告。")
+
+    keywords = get_trending_keywords()
+    categories = sorted(set(k["category"] for k in keywords))
+    cat_filter = st.selectbox("品类筛选", ["全部"] + categories)
+
+    filtered = keywords if cat_filter == "全部" else [k for k in keywords if k["category"] == cat_filter]
+
+    cols = st.columns(4)
+    for i, kw in enumerate(filtered):
+        trend_icon = "🔥" if kw["trend"] == "up" else ""
+        with cols[i % 4]:
+            if st.button(f"{trend_icon} {kw['keyword']}\n_{kw['category']}_", key=f"hot_{i}", use_container_width=True):
+                st.session_state.inspire_keyword = kw["keyword"]
+                st.session_state.analyze_now = True
+                st.rerun()
+
+# ============================================================
+# 🎯 发现机会（双报告：选品 + 达人）
+# ============================================================
+elif selected_tab == "🎯 发现机会":
+    st.subheader("🎯 发现机会")
+    st.caption("输入品类名，一键生成选品洞察 + 达人选题方案。")
+
+    # 快捷标签
+    quick_kws = ["健身服", "磁吸感应灯", "辣条", "瑜伽裤", "蓝牙耳机", "养生茶"]
+    st.markdown("**热门：** " + " · ".join(
+        f"`{kw}`" for kw in quick_kws
+    ))
+
+    # Input
+    default_kw = st.session_state.get("inspire_keyword", "")
+    query = st.text_input("品类名称", value=default_kw, placeholder="例如：辣条、磁吸感应灯", key="discover_input")
+
+    analyze = st.button("🔍 一键分析", type="primary", disabled=not query, key="discover_btn")
+
+    if (analyze or st.session_state.get("analyze_now")) and query:
+        st.session_state.analyze_now = False
+        st.session_state.inspire_keyword = ""
+
+        with st.spinner(f"正在分析「{query}」..."):
+            sel_report, creator_report = run_insight_analysis(query)
+
+        tab1, tab2 = st.tabs(["📊 选品洞察", "🎬 达人选题"])
+
+        with tab1:
+            st.markdown("### 📊 选品洞察报告")
+            st.markdown(sel_report)
+
+        with tab2:
+            st.markdown("### 🎬 达人选题方案")
+            st.markdown("> 基于评论区真实反馈，为你量身定制的内容创作方案。博主直接复制就能拍。")
+            st.markdown(creator_report)
+
+# ============================================================
+# 💬 智能问答
+# ============================================================
+elif selected_tab == "💬 智能问答":
     st.subheader("💬 智能问答")
+    st.caption("基于小红书真实评论数据回答选品问题。")
 
     if "qa_msgs" not in st.session_state:
         st.session_state.qa_msgs = []
@@ -173,109 +369,58 @@ if mode == "问答模式":
         st.session_state.qa_msgs.append({"role": "user", "content": q})
         with st.chat_message("user"):
             st.markdown(q)
-
         with st.chat_message("assistant"):
             ans = run_qa(q)
-
-            if not ans or _should_fetch(ans):
-                st.markdown("📊 知识库暂无此数据，正在从小红书实时抓取...")
-                c = _auto_fetch(q, count=30)
-                if c > 0:
-                    st.markdown(f"✅ 已抓取 {c} 篇真实笔记，重新检索...")
-                    import time; time.sleep(0.5)
-                    ans = run_qa(q)
-                    if ans and not _should_fetch(ans):
-                        ans = f"（📥 已从小红书抓取 {c} 篇真实笔记）\n\n{ans}"
-                    else:
-                        ans = (f"（📥 已抓取 {c} 篇笔记，但仍未匹配）\n\n{ans or '未找到相关信息'}")
-                else:
-                    ans = f"{ans}\n\n💡 自动抓取未成功。\n  • 本地: `uv run python src/real_crawler.py \"{q}\"`\n  • 云端: 配置 Streamlit Secrets → XHS_COOKIES"
-
+            if not ans:
+                ans = f"知识库暂无「{q}」相关数据。\n\n请先在「📥 导入数据」中粘贴小红书笔记链接，或在「🎯 发现机会」中尝试已有品类。"
             st.markdown(ans)
         st.session_state.qa_msgs.append({"role": "assistant", "content": ans})
 
 # ============================================================
-# 洞察模式（chat_message + st.write_stream 流式）
+# 📥 导入数据（替代自动抓取）
 # ============================================================
-elif mode == "洞察模式":
-    st.subheader("📊 选品洞察")
+elif selected_tab == "📥 导入数据":
+    st.subheader("📥 导入笔记")
+    st.caption("自动抓取容易被小红书拦截。改用粘贴链接导入，更稳定更安全。")
 
-    if "is_msgs" not in st.session_state:
-        st.session_state.is_msgs = []
+    st.info(
+        "自动抓取功能因小红书强反爬已移除。\n\n"
+        "**推荐方式：** 在小红书 App 中复制笔记链接，粘贴到下方导入。每次可以粘贴多条链接。"
+    )
 
-    for m in st.session_state.is_msgs:
-        with st.chat_message(m["role"]):
-            st.markdown(m["content"])
+    imported = False
+    links_text = st.text_area(
+        "粘贴小红书笔记链接（每行一条，建议3-5条）",
+        placeholder="https://www.xiaohongshu.com/explore/xxxxxxxxxxxxxx\nhttps://www.xiaohongshu.com/explore/yyyyyyyyyyyyyy\nhttps://www.xiaohongshu.com/explore/zzzzzzzzzzzzzz",
+        height=140,
+    )
 
-    if q := st.chat_input("输入品类，如：磁吸感应灯、健身服..."):
-        st.session_state.is_msgs.append({"role": "user", "content": q})
-        with st.chat_message("user"):
-            st.markdown(q)
+    category = st.text_input("笔记所属品类", placeholder="例如：健身服、蓝牙耳机")
 
-        with st.chat_message("assistant"):
-            report = st.write_stream(run_insight_stream(q))
-        st.session_state.is_msgs.append({"role": "assistant", "content": report})
+    if st.button("📥 导入", type="primary", disabled=not links_text or not category):
+        links = [l.strip() for l in links_text.strip().split("\n") if l.strip()]
+        log_placeholder = st.empty()
 
-# ============================================================
-# 抓取模式
-# ============================================================
-else:
-    st.subheader("🕷️ 真实数据抓取")
-    st.caption("打开浏览器抓取小红书真实笔记和评论。首次使用需扫码登录。")
+        success_count = 0
+        fail_count = 0
 
-    category = st.text_input("品类名称", placeholder="例如：健身服、蓝牙耳机")
-    col1, col2 = st.columns(2)
-    with col1:
-        count = st.number_input("抓取篇数", min_value=5, max_value=100, value=30)
-    with col2:
-        with_comments = st.checkbox("同时抓评论", value=True)
-
-    if st.button("🚀 开始抓取", type="primary", disabled=not category):
-        log_box = st.container()
-        progress_bar = st.progress(0)
-
-        try:
-            from src.real_crawler import XHSCrawler
-            log_box.info(f"🕷️ 正在打开浏览器...")
-
-            cookies_json = ""
-            try:
-                cookies_json = st.secrets.get("XHS_COOKIES", "")
-            except Exception:
-                pass
-
-            crawler = XHSCrawler(cookies_json=cookies_json)
-
-            if not crawler.is_logged_in:
-                if crawler.is_cloud_mode:
-                    log_box.warning("☁️ 云端模式未登录。请在 Streamlit Secrets 中配置 XHS_COOKIES")
-                    log_box.info("💡 本地运行 scripts/export_cookies.py 导出 cookie")
-                else:
-                    log_box.warning("⚠️ 未登录小红书，正在打开登录页...")
-                    log_box.info("👆 请在浏览器窗口中扫码登录")
-                    if not crawler.login_interactive():
-                        log_box.error("❌ 登录超时，请重试")
-                        crawler.close()
-                        st.stop()
-                    log_box.success("✅ 登录成功！开始抓取...")
-
-            log_box.info(f"🕷️ 正在搜索「{category}」...")
-            saved = crawler.crawl(category, count=count, with_comments=with_comments)
-            crawler.close()
-
-            if saved > 0:
-                rebuild_indexes()
-                log_box.success(f"✅ 完成！已抓取 {saved} 篇「{category}」笔记，知识库已更新。")
-                progress_bar.progress(100)
+        for i, link in enumerate(links):
+            log_placeholder.info(f"正在导入 ({i+1}/{len(links)})： {link[:60]}...")
+            result = import_note_by_url(link, category)
+            if result["success"]:
+                success_count += 1
+                st.success(f"✅ 导入成功：{link[:50]}... ({result.get('comments', 0)} 条评论)")
             else:
-                log_box.error("❌ 未抓取到任何笔记。请检查网络或重新登录。")
-        except Exception as e:
-            log_box.error(f"❌ 抓取出错: {e}")
-            import traceback
-            st.code(traceback.format_exc())
+                fail_count += 1
+                st.warning(f"❌ 导入失败：{link[:50]}... — {result.get('error', '未知错误')}")
+
+        if success_count > 0:
+            log_placeholder.success(f"完成！成功 {success_count} 篇，失败 {fail_count} 篇")
+        else:
+            log_placeholder.error(f"全部失败（{fail_count} 篇）。请确保已登录后重试。")
 
 # ============================================================
 # 底部
 # ============================================================
 st.markdown("---")
-st.caption(f"🎯 小红书爆款雷达 v2.0 · 问答 + 洞察 + 自动抓取 · 数据版本 {st.session_state.data_version}")
+st.caption(f"🎯 小红书爆款雷达 v3.0 · 选品+选题双引擎 · {_state.stats['total_notes']} 篇笔记")

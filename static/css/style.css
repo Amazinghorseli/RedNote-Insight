@@ -1206,3 +1206,242 @@ body {
     .hotlist-keyword { font-size: 15px; }
     .hotlist-bar-bg { max-width: 120px; }
 }
+
+/* ============================================================
+   搜索历史
+   ============================================================ */
+.search-history {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+    animation: fadeIn 0.3s ease;
+}
+.history-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    margin-right: 2px;
+}
+.history-item {
+    padding: 4px 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.history-item:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-light);
+}
+.history-clear {
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: var(--transition);
+    opacity: 0.4;
+}
+.history-clear:hover {
+    opacity: 1;
+    color: var(--primary);
+    background: var(--primary-light);
+}
+
+/* ============================================================
+   下载 / 打印按钮
+   ============================================================ */
+.btn-download {
+    padding: 8px 16px;
+    background: var(--card-bg);
+    color: var(--primary);
+    border: 1px solid var(--primary);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+.btn-download:hover { background: var(--primary-light); transform: scale(1.03); }
+
+.btn-print {
+    padding: 8px 16px;
+    background: var(--card-bg);
+    color: #7c3aed;
+    border: 1px solid #7c3aed;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+.btn-print:hover { background: #f5f3ff; transform: scale(1.03); }
+
+/* ============================================================
+   报告 Markdown 渲染样式（洞察报告容器内）
+   ============================================================ */
+.insight-report.rendered {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    line-height: 1.8;
+    white-space: normal;
+    color: var(--text);
+}
+.insight-report.rendered h1 {
+    font-size: 22px;
+    font-weight: 800;
+    margin: 20px 0 10px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--primary-light);
+    color: var(--text);
+}
+.insight-report.rendered h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 18px 0 8px;
+    color: var(--primary);
+}
+.insight-report.rendered h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 14px 0 6px;
+    color: var(--text);
+}
+.insight-report.rendered strong {
+    color: var(--primary);
+    font-weight: 700;
+}
+.insight-report.rendered ul, .insight-report.rendered ol {
+    margin: 6px 0;
+    padding-left: 20px;
+}
+.insight-report.rendered li { margin: 3px 0; }
+.insight-report.rendered p { margin: 8px 0; }
+.insight-report.rendered hr {
+    border: none;
+    border-top: 2px solid var(--primary-light);
+    margin: 16px 0;
+}
+.insight-report.rendered table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 13px;
+}
+.insight-report.rendered th {
+    background: var(--primary-light);
+    color: var(--primary);
+    font-weight: 700;
+    padding: 8px 12px;
+    text-align: left;
+    border: 1px solid #fdd;
+}
+.insight-report.rendered td {
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+}
+.insight-report.rendered tr:nth-child(even) td { background: #fafafa; }
+.insight-report.rendered code {
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+    font-size: 13px;
+    color: #e0494f;
+}
+.insight-report.rendered blockquote {
+    border-left: 3px solid var(--primary);
+    margin: 10px 0;
+    padding: 6px 14px;
+    background: var(--primary-light);
+    border-radius: 0 6px 6px 0;
+    color: #666;
+}
+
+/* 加载骨架屏 */
+.skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 6px;
+}
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+.skeleton-line { height: 14px; margin-bottom: 10px; }
+.skeleton-line.short { width: 60%; }
+.skeleton-line.medium { width: 80%; }
+.skeleton-heading { height: 22px; width: 40%; margin-bottom: 14px; }
+.skeleton-block { padding: 24px; }
+
+/* 错误状态 + 重试按钮 */
+.error-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--text-secondary);
+}
+.error-state .error-icon { font-size: 36px; margin-bottom: 10px; opacity: 0.6; }
+.error-state p { font-size: 14px; margin: 6px 0; }
+.btn-retry {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 10px 24px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.btn-retry:hover { background: var(--primary-hover); }
+
+/* SSE 错误容器重试按钮 */
+.sse-error-actions { margin-top: 12px; text-align: center; }
+
+/* ============================================================
+   详情弹出层 — 双 Tab 布局
+   ============================================================ */
+.detail-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 16px;
+    border-bottom: 2px solid var(--border);
+}
+.detail-tab {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+}
+.detail-tab:hover { color: var(--text); }
+.detail-tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+.detail-tab-content {
+    animation: fadeIn 0.3s ease;
+    min-height: 120px;
+}

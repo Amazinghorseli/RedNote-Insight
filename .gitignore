@@ -40,3 +40,8 @@ data/cookies.json
 # 运行时缓存
 data/trending_cache.json
 data/trending_cache*.json
+
+# 临时 / 探索生成文件
+explore_lines.txt
+note_items.txt
+search_page.html

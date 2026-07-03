@@ -68,9 +68,17 @@ class CrawlerInterface:
             return False
         return self._crawler.login_interactive(timeout_minutes=timeout_minutes)
 
-    def crawl(self, category: str, count: int = 30) -> dict:
+    def crawl(self, category: str, count: int = 30, comment_level: str = "all") -> dict:
         """
         抓取品类数据。
+
+        Args:
+            category: 品类名称
+            count: 抓取篇数
+            comment_level: 评论层级
+                "all" — 全部评论（一级+回复）
+                "top" — 只抓一级评论
+                "hot" — 只抓热门评论
 
         Returns:
             {"method": "real", "count": int, "details": [...]}
@@ -91,7 +99,7 @@ class CrawlerInterface:
                 "error": "未登录小红书。请先在命令行运行: uv run python src/real_crawler.py \"品类名\" 完成登录"
             }
 
-        saved = self._crawler.crawl(category, count=count, with_comments=True)
+        saved = self._crawler.crawl(category, count=count, with_comments=True, comment_level=comment_level)
         return {
             "method": "real",
             "count": saved,

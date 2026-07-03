@@ -1,0 +1,187 @@
+{
+  "name": "RedNote-Insight RAG 评估集",
+  "version": "1.0",
+  "description": "20 条标准查询，覆盖知识库中的品类型、品牌查询、痛点挖掘、对比类查询。用于评估混合检索管道的 Recall@K、MRR、NDCG。",
+  "queries": [
+    {
+      "id": "q01",
+      "query": "辣条哪个品牌好",
+      "category": "食品",
+      "type": "品牌比较",
+      "difficulty": "easy",
+      "relevant_keywords": ["辣条", "卫龙", "盐津铺子", "品牌"],
+      "min_relevant_docs": 3
+    },
+    {
+      "id": "q02",
+      "query": "磁吸感应灯",
+      "category": "家居",
+      "type": "精确品类",
+      "difficulty": "easy",
+      "relevant_keywords": ["感应灯", "磁吸", "灯"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q03",
+      "query": "风衣怎么搭配",
+      "category": "服饰",
+      "type": "穿搭建议",
+      "difficulty": "medium",
+      "relevant_keywords": ["风衣", "穿搭", "搭配"],
+      "min_relevant_docs": 3
+    },
+    {
+      "id": "q04",
+      "query": "健身服推荐",
+      "category": "服饰",
+      "type": "推荐类",
+      "difficulty": "easy",
+      "relevant_keywords": ["健身服", "运动", "推荐"],
+      "min_relevant_docs": 3
+    },
+    {
+      "id": "q05",
+      "query": "便宜好用的收纳盒",
+      "category": "家居",
+      "type": "语义搜索",
+      "difficulty": "medium",
+      "relevant_keywords": ["收纳", "盒", "便宜", "好用", "桌面收纳"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q06",
+      "query": "手机壳什么材质好",
+      "category": "数码",
+      "type": "材质对比",
+      "difficulty": "medium",
+      "relevant_keywords": ["手机壳", "材质", "硅胶", "保护"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q07",
+      "query": "减肥吃什么零食",
+      "category": "食品",
+      "type": "语义搜索",
+      "difficulty": "hard",
+      "relevant_keywords": ["低卡", "零食", "减肥", "代餐"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q08",
+      "query": "香薰推荐",
+      "category": "家居",
+      "type": "推荐类",
+      "difficulty": "easy",
+      "relevant_keywords": ["香薰", "气味", "推荐"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q09",
+      "query": "茶杯哪个牌子好",
+      "category": "家居",
+      "type": "品牌比较",
+      "difficulty": "easy",
+      "relevant_keywords": ["茶杯", "杯子", "品牌"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q10",
+      "query": "装饰画怎么选",
+      "category": "家居",
+      "type": "选购指南",
+      "difficulty": "medium",
+      "relevant_keywords": ["装饰画", "画", "风格"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q11",
+      "query": "租房改造好物",
+      "category": "家居",
+      "type": "场景搜索",
+      "difficulty": "hard",
+      "relevant_keywords": ["租房", "改造", "dorm", "收纳", "装饰"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q12",
+      "query": "健身器材家用推荐",
+      "category": "运动",
+      "type": "推荐类",
+      "difficulty": "easy",
+      "relevant_keywords": ["健身", "器材", "家用", "器械"],
+      "min_relevant_docs": 3
+    },
+    {
+      "id": "q13",
+      "query": "辣条吃多了有什么危害",
+      "category": "食品",
+      "type": "知识问答",
+      "difficulty": "medium",
+      "relevant_keywords": ["辣条", "健康", "食品"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q14",
+      "query": "风衣和冲锋衣有什么区别",
+      "category": "服饰",
+      "type": "对比类",
+      "difficulty": "hard",
+      "relevant_keywords": ["风衣", "冲锋衣", "区别", "对比"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q15",
+      "query": "瑜伽裤哪个品牌性价比高",
+      "category": "服饰",
+      "type": "性价比查询",
+      "difficulty": "hard",
+      "relevant_keywords": ["瑜伽裤", "健身服", "品牌", "性价比", "价格"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q16",
+      "query": "办公桌收纳整理",
+      "category": "家居",
+      "type": "场景搜索",
+      "difficulty": "medium",
+      "relevant_keywords": ["桌面", "收纳", "办公", "整理"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q17",
+      "query": "辣条的价格一般多少",
+      "category": "食品",
+      "type": "价格查询",
+      "difficulty": "easy",
+      "relevant_keywords": ["辣条", "价格", "元"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q18",
+      "query": "宿舍必备好物推荐",
+      "category": "家居",
+      "type": "场景搜索",
+      "difficulty": "medium",
+      "relevant_keywords": ["宿舍", "dorm", "推荐", "必备"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q19",
+      "query": "冬天穿什么外套保暖又好看",
+      "category": "服饰",
+      "type": "场景+语义",
+      "difficulty": "hard",
+      "relevant_keywords": ["风衣", "羽绒服", "外套", "保暖", "冬天"],
+      "min_relevant_docs": 2
+    },
+    {
+      "id": "q20",
+      "query": "手机壳防摔测评",
+      "category": "数码",
+      "type": "测评类",
+      "difficulty": "medium",
+      "relevant_keywords": ["手机壳", "保护", "防摔"],
+      "min_relevant_docs": 2
+    }
+  ]
+}
