@@ -138,15 +138,35 @@ app.include_router(trending.router)
 app.include_router(inspiration.router)
 
 # ---- 静态文件托管 ----
+react_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"
 static_dir = Path(__file__).parent.parent.parent / "static"
 
+# React SPA 生产模式：挂载静态资源
+react_assets = react_dist / "assets"
+if react_assets.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(react_assets)), name="react_assets")
 
+# 统一前端入口：dist 优先 > static 回退
 @app.get("/")
-async def serve_frontend():
-    return FileResponse(static_dir / "index.html")
+async def serve_frontend_root():
+    """根路径：React SPA（如已构建）或旧版 index.html"""
+    if react_dist.is_dir():
+        return FileResponse(str(react_dist / "index.html"))
+    if static_dir.exists():
+        return FileResponse(str(static_dir / "index.html"))
+    return JSONResponse({"message": "Frontend not built. Run: cd frontend && npm run build"}, status_code=404)
 
+# SPA fallback: 非 API 路径回退到 index.html（仅生产模式）
+if react_dist.is_dir():
+    @app.get("/{full_path:path}")
+    async def serve_react_spa(full_path: str):
+        file_path = react_dist / full_path
+        if full_path and file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(react_dist / "index.html"))
 
-if static_dir.exists():
+# 开发回退：托管旧 static/ 目录
+if static_dir.exists() and not react_dist.is_dir():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 

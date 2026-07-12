@@ -45,3 +45,6 @@ data/trending_cache*.json
 explore_lines.txt
 note_items.txt
 search_page.html
+
+# React 前端
+frontend/node_modules/
