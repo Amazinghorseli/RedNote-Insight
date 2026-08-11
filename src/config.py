@@ -1,13 +1,14 @@
-
 """
 src/config.py — 类型安全配置管理
 ==================================
 基于 pydantic-settings，自动从 .env / 环境变量读取。
 IDE 自动补全，类型错误启动时报错而非运行时炸。
 """
+
 import os
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -21,12 +22,13 @@ class Settings(BaseSettings):
 
     # ===== LLM 配置 =====
     llm_model: str = Field(
-        default="deepseek-ai/DeepSeek-V3",
+        default="deepseek-ai/DeepSeek-V4",
         description="LLM 模型名（OpenAI 兼容格式）",
     )
     llm_temperature: float = Field(
         default=0.0,
-        ge=0.0, le=2.0,
+        ge=0.0,
+        le=2.0,
         description="生成温度（0=确定性，2=最随机）",
     )
     openai_api_key: str = Field(
@@ -38,6 +40,16 @@ class Settings(BaseSettings):
         default="https://api.siliconflow.cn/v1",
         alias="OPENAI_BASE_URL",
         description="API Base URL",
+    )
+    llm_api_key: str = Field(
+        default="",
+        alias="LLM_API_KEY",
+        description="Optional dedicated API key for the report LLM",
+    )
+    llm_base_url: str = Field(
+        default="",
+        alias="LLM_BASE_URL",
+        description="Optional dedicated base URL for the report LLM",
     )
 
     # ===== Embedding 配置 =====
@@ -55,20 +67,53 @@ class Settings(BaseSettings):
     )
     reranker_threshold: float = Field(
         default=0.1,
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="相关性阈值，低于此分视为不相关",
     )
 
     # ===== RAG 参数 =====
     retry_limit: int = Field(
         default=2,
-        ge=0, le=5,
+        ge=0,
+        le=5,
         description="自纠错最大重试次数",
     )
     top_k: int = Field(
         default=3,
-        ge=1, le=20,
+        ge=1,
+        le=20,
         description="检索返回文档数",
+    )
+
+    # ===== 混合检索参数 =====
+    rrf_k: int = Field(
+        default=60,
+        ge=1,
+        le=500,
+        alias="RRF_K",
+        description="RRF 融合常数（Cormack et al. 2009 推荐 60）",
+    )
+    bm25_k: int = Field(
+        default=25,
+        ge=5,
+        le=100,
+        alias="BM25_K",
+        description="BM25 关键词检索候选数",
+    )
+    vector_k: int = Field(
+        default=25,
+        ge=5,
+        le=100,
+        alias="VECTOR_K",
+        description="向量检索候选数",
+    )
+    final_k: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        alias="FINAL_K",
+        description="RRF 融合后返回的最终文档数",
     )
 
     # ===== CORS 配置 =====
@@ -120,8 +165,8 @@ settings = Settings()
 LLM_CONFIG = {
     "model": settings.llm_model,
     "temperature": settings.llm_temperature,
-    "api_key": settings.openai_api_key,
-    "base_url": settings.openai_base_url,
+    "api_key": settings.llm_api_key or settings.openai_api_key,
+    "base_url": settings.llm_base_url or settings.openai_base_url,
 }
 
 EMBEDDING_CONFIG = {
@@ -139,6 +184,10 @@ RERANKER_CONFIG = {
 RERANKER_THRESHOLD = settings.reranker_threshold
 RETRY_LIMIT = settings.retry_limit
 TOP_K = settings.top_k
+RRF_K = settings.rrf_k
+BM25_K = settings.bm25_k
+VECTOR_K = settings.vector_k
+FINAL_K = settings.final_k
 
 # 路径（保持与旧版兼容）
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

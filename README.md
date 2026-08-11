@@ -1,411 +1,212 @@
-# 🎯 小红书爆款雷达 — AI 选品 + 选题引擎
+# 🎯 RedNote Insight — AI-Powered Product & Content Intelligence
 
-<p align="center">
-  <b>翻评论 · 找痛点 · 定方向 — 一个品类名，两套完整方案</b>
-</p>
+> *Mine Xiaohongshu comments. Discover opportunities. Generate reports with evidence.*
 
-<p align="center">
-  <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react" alt="React">
-  <img src="https://img.shields.io/badge/Vite-5-646CFF?logo=vite" alt="Vite">
-  <img src="https://img.shields.io/badge/FastAPI-0.115+-teal" alt="FastAPI">
-  <img src="https://img.shields.io/badge/ChromaDB-0.5+-yellow" alt="ChromaDB">
-  <img src="https://img.shields.io/badge/SSE-流式双报告-orange" alt="SSE">
-  <img src="https://img.shields.io/badge/BGE_M3-向量模型-orange" alt="BGE-M3">
-  <img src="https://img.shields.io/badge/DeepSeek_V3-大模型-purple" alt="DeepSeek">
-  <img src="https://img.shields.io/badge/Python-3.11-blue" alt="Python">
-  <img src="https://img.shields.io/badge/灵感库-189条精选-green" alt="灵感库">
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
-</p>
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)](https://react.dev)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-teal)](https://fastapi.tiangolo.com)
+[![DeepSeek V4](https://img.shields.io/badge/LLM-DeepSeek_V4-purple)](https://deepseek.com)
+[![BGE-M3](https://img.shields.io/badge/Embedding-BGE_M3-orange)](https://huggingface.co/BAAI/bge-m3)
+[![SSE](https://img.shields.io/badge/Streaming-SSE-orange)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue)](https://python.org)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
 
-## 📖 目录
+## What It Does · 它能做什么
 
-- [🎯 它能做什么](#-它能做什么)
-- [🏗️ 系统架构](#️-系统架构)
-- [✨ 核心特性](#-核心特性)
-- [⚡ 快速开始](#-快速开始)
-- [🔧 开发指南](#-开发指南)
-- [🐳 Docker 部署](#-docker-部署)
-- [🔌 API 文档](#-api-文档)
-- [📁 项目结构](#-项目结构)
-- [🗺️ 路线图](#️-路线图)
+**English** — RedNote Insight analyzes Xiaohongshu (RedNote) product reviews to generate two parallel AI reports from a single search: a **Product Selection Report** for e-commerce sellers and a **Content Strategy Plan** for bloggers. Every insight is backed by cited review evidence — no hallucinated numbers.
 
----
+**中文** — 输入一个品类，同时生成两份 AI 报告：面向电商卖家的**选品分析**和面向内容博主的**选题方案**。所有结论绑定评论原文证据，杜绝 LLM 编造数据。
 
-## 🎯 它能做什么
+| Report · 报告 | Audience · 受众 | Includes · 包含 |
+|---------------|-----------------|-----------------|
+| 📊 Product Selection · 选品报告 | E-commerce sellers · 电商卖家 | Pain points, demand signals, brand distribution, evidence comments · 用户痛点、需求信号、品牌分布、证据评论 |
+| 🎬 Content Strategy · 选题方案 | Content creators · 内容博主 | 3 viral topics + script outlines + cover design + publishing strategy · 3个爆款选题 + 脚本大纲 + 封面方案 + 发布策略 |
 
-输入一个品类名，**同时生成两套完整方案**：
+### 💡 Inspiration Library · 灵感库
 
-| 报告 | 受众 | 包含 |
-|------|------|------|
-| 📊 **选品报告** | 电商卖家 | 用户痛点、利润评估、竞争格局、三档定价、避坑提醒 |
-| 🎬 **选题方案** | 内容博主 | 3 个爆款选题 + 完整脚本大纲 + 封面方案 + 发布策略 |
+**English** — Don't know what to search? The sidebar "Inspiration Library" offers **189 curated search directions** across 9 categories. Each entry is tagged (🛒 product / 🎬 content / 🛒+🎬 both) with a one-line prompt. Click to search instantly.
 
-### 前端双按钮
-
-| 按钮 | 默认展示 | 适用场景 |
-|------|----------|----------|
-| 🔍 选品分析 | 选品报告 | 我要卖什么、怎么定价 |
-| 🎬 博主方案 | 选题方案 | 我要拍什么、脚本怎么写 |
-
-两份报告都生成完后自动弹出**一键复制导出条**——Markdown 格式，支持一键复制全部 / 下载 .md / 打印 PDF。
-
-### 💡 灵感库
-
-不知道搜什么？左侧栏「灵感库」提供 **9 个品类 × 21 条 = 189 条精选方向**。每条都标注了适用标签（🛒选品 / 🎬选题 / 🛒+🎬 双用），配一句话方向提示。点击直接搜，零等待。
-
-### 报告示例
-
-搜「辣条」输出（即使 LLM 欠费，模板兜底照样出）：
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 电商选品洞察报告 — 辣条
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-【利润空间评估】
-平均售价：¥10-30 | 预估利润率：65% | 定价倍率：3x
-
-【用户痛点 TOP 5】
-1. 性价比问题（22%）— "比实体店贵一倍"
-2. 质量不稳定（18%）— "批次差异大，每次味道不一样"
-3. 包装简陋（15%）— "送礼拿不出手"
-4. 口味单一（12%）— "希望出创新风味"
-5. 售后缺失（10%）— "漏油不退货"
-
-【三档定价选品】
-💰 低价位 ¥9.9 → 麻辣素肉小包装，利润率 65%
-💰 中价位 ¥28  → 地域风味礼盒，利润率 71%
-💰 高价位 ¥68  → 国潮联名礼盒+花茶，利润率 74%
-
-【选品综合评分】71/100
-一句话：用"地域风味+社交属性"破局巨头垄断。
-```
+**中文** — 不知道搜什么？左侧栏「灵感库」提供 **9 个品类 × 21 条 = 189 条精选方向**。每条标注适用标签（🛒选品 / 🎬选题 / 🛒+🎬双用），配一句话方向提示。点击直接搜，零等待。
 
 ---
 
-## 🏗️ 系统架构
+## Architecture · 系统架构
 
 ```
 ┌──────────────────────────────────────────────────┐
-│  前端：React 18 + Vite 5 + SSE + 双 Tab + 灵感库   │
-│  双按钮（选品分析 / 博主方案）+ 一键导出             │
+│  Frontend · 前端                                   │
+│  React 18 + Vite 5 · SSE streaming · 9 components │
 ├──────────────────────────────────────────────────┤
-│  API：FastAPI 全异步 + 11 路由 + 依赖注入           │
+│  API · 接口                                        │
+│  FastAPI async · 11 routes · dependency injection │
 ├──────────────────────────────────────────────────┤
-│  Agent 管道：                                      │
-│    混合检索 → 评论分析 → 需求聚合                   │
-│    ├→ InsightGenerator  → 📊 选品报告              │
-│    └→ CreatorGenerator   → 🎬 选题方案              │
+│  Agent Pipeline · Agent 管道                       │
+│  Hybrid Retrieval → Comment Analysis → Aggregation│
+│    ├→ InsightGenerator  → 📊 Product Report        │
+│    └→ CreatorGenerator   → 🎬 Content Plan         │
 ├──────────────────────────────────────────────────┤
-│  数据：ChromaDB/PG + BM25 + 灵感库(189条)          │
+│  Data · 数据                                       │
+│  PostgreSQL/pgvector · ChromaDB · Redis            │
 └──────────────────────────────────────────────────┘
 ```
 
-**数据流：** 用户输入 → 混合检索（向量+BM25+RRF）→ CrossEncoder 重排序 → 评论分析 + 需求聚合 → 两个 Agent 并发生成 → SSE 流式双报告
+**Data Flow · 数据流**: User input → Hybrid RAG (BGE-M3 + BM25 + RRF) → CrossEncoder Rerank → Comment Analysis + Demand Aggregation → Dual Agent parallel generation → SSE streaming
 
 ---
 
-## ✨ 核心特性
+## Key Features · 核心特性
 
-### 🔀 混合检索
-- **BGE-M3 向量检索**：捕捉中文语义相似性
-- **BM25 + jieba**：精确匹配品牌名、型号
-- **RRF 融合**：两种排序加权合并
-- **CrossEncoder 重排序**：比 LLM-as-Judge 快 10 倍
+### 🔀 Hybrid Retrieval · 混合检索
 
-### 📊 双 Agent 管道
-同一份聚合数据，两个 Agent 并行输出：
+**English** — BGE-M3 vector search captures semantic similarity. BM25 + jieba ensures exact brand/model matching. RRF (K=60) fuses heterogeneous scores. CrossEncoder reranks the top results — 10× faster than LLM-as-Judge.
 
-| Agent | 职责 |
-|-------|------|
-| **InsightGenerator** | 选品报告：利润空间、用户痛点、三档定价、避坑提醒 |
-| **CreatorGenerator** | 选题方案：3 个爆款选题 + 脚本大纲 + 封面 + 发布策略 |
+**中文** — BGE-M3 向量检索捕捉中文语义相似性，BM25 + jieba 精确匹配品牌名和型号，RRF（K=60）融合异构分数，CrossEncoder 重排序比 LLM-as-Judge 快 10 倍。
 
-两个 Agent **共用一套检索→分析→聚合管道**，换个 prompt 就让数据产生双倍价值。
+### 📊 Dual Agent Pipeline · 双 Agent 管道
 
-### 🌊 SSE 流式双报告
-`/api/insight/stream` 一次请求同时推送两份报告：
+**English** — One retrieval, one aggregation, two agents. `InsightGenerator` produces product selection reports with evidence citations; `CreatorGenerator` generates content plans with scripts and cover strategies. Both stream simultaneously via a single SSE connection.
 
-```
-SSE 事件流：
-  stage → token:selection（选品报告逐字推送）
-        → token:creator   （选题方案逐字推送）
-        → done            （导出条出现）
-```
+**中文** — 一次检索、一次聚合，双 Agent 并行：`InsightGenerator` 生成带证据引用的选品报告，`CreatorGenerator` 生成选题脚本和封面方案。两路 Token 经单一 SSE 连接同时推送。
 
-### ⚛️ React + Vite 前端（v3.0 新增）
+### 🛡️ Trusted Generation · 可信生成
 
-| | v2.0 | v3.0 |
-|------|------|------|
-| 框架 | 原生 JS (1289 行单文件) | React 18 + Vite 5 |
-| 状态管理 | 全局变量 + DOM 查询 | Context + useReducer |
-| SSE 流式 | 回调嵌套 | useSSE Hook（请求去重 + AbortController） |
-| 搜索锁 | 手动变量 | overlay 状态自动解锁 |
-| 组件化 | 无 | 9 个独立组件，职责清晰 |
-| 开发体验 | 无热更新 | Vite HMR 热更新 |
-| 后端 | 零改动 | 零改动（仅新增 SPA fallback） |
+**English** — ReportGuard validates numbers against actual review data. Business metrics (profit, weight, shipping cost) that aren't present in the review data are explicitly returned as `null` — the system refuses to hallucinate entry-barrier conclusions.
 
-### 💡 灵感库（189 条精选）
-- 9 个品类 × 21 条 = 189 条人工精选方向
-- 每条标注 🛒选品 / 🎬选题 / 🛒+🎬 双用
-- 一句话方向提示，搜了就能出报告
-- 纯静态 Python dict，零延迟、零爬虫依赖
+**中文** — ReportGuard 按金额、比例、评分、重量和销量进行分语义校验。经营数据缺失时，相关字段显式返回 `null`，拒绝编造入场结论。
 
-### 🛡️ 生产级基础设施
-- **Docker + docker-compose**：API + PostgreSQL + Redis 一键部署
-- **GitHub Actions CI**：lint → test → build
-- **依赖注入**（FastAPI Depends）：全局状态管理 + 测试友好
-- **RequestID 中间件**：每个请求 UUID 追踪
-- **全局异常处理**：统一 JSON 错误格式
-- **限流保护**（slowapi）：可配置 QPS
-- **Prompt YAML 管理**：版本控制 + 热重载
+### ⚛️ React + Vite Frontend · 现代化前端
+
+**English** — Rebuilt from vanilla JS to React 18 + Vite 5. Custom `useSSE` hook with request deduplication and AbortController. 9 independent components with Context + useReducer state management.
+
+**中文** — 从原生 JS 重构为 React 18 + Vite 5。自定义 `useSSE` Hook 实现请求去重和 AbortController。9 个独立组件，Context + useReducer 状态管理。
+
+### 🛡️ Production Infrastructure · 生产基础设施
+
+**English** — Docker + docker-compose for one-command deployment (API + PostgreSQL + Redis). GitHub Actions CI: lint → test → build. 140 automated tests including 21 trust-generation-specific tests.
+
+**中文** — Docker + docker-compose 一键部署（API + PostgreSQL + Redis）。GitHub Actions CI 流水线：lint → test → build。140 项自动化测试，含 21 项可信生成专项测试。
 
 ---
 
-## 🧠 设计决策
+## Quick Start · 快速开始
 
-### 为什么做双 Agent（选品 + 选题）？
+### Prerequisites · 前置条件
 
-传统 RAG 是"一个问题→一个答案"。但对同一个评论区数据，电商卖家和内容博主关心的是完全不同的事。**换个 prompt 就让同一份数据产生双倍价值**——这不是技术炫技，是业务驱动的架构选择。
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) (auto-installed by run script)
+- API key from [SiliconFlow](https://siliconflow.cn) or [DeepSeek](https://platform.deepseek.com)
 
-### 为什么混合检索？
-
-| 方案 | 擅长 | 不擅长 |
-|------|------|--------|
-| 纯向量检索 | 语义相似（"求推荐便宜好用的收纳"） | 品牌名精确匹配 |
-| 纯 BM25 | 关键词精确（"磁吸感应灯"） | 语义泛化 |
-| RRF 融合 | 取两者长处 | — |
-
-### 为什么从原生 JS 迁移到 React？
-
-原 `app.js` 1289 行单文件，全局变量满天飞，SSE 回调嵌套、搜索锁靠手动变量管理。React 重构后：状态集中在 Context + useReducer，SSE 封装为可复用 Hook，每个 UI 块独立组件。**后端一行未改**——FastAPI 只多了一个 SPA fallback 路由。
-
-### 为什么 SSE 而不是 WebSocket？
-
-RAG 只需要服务端→客户端单向推送。SSE 原生支持自动重连、零依赖，完全够用。
-
-### 为什么 Prompt 用 YAML 管理？
-
-版本控制 + Git 可追踪 + 改 prompt 不重启服务。Prompt 也应该有 CI。
-
-### LLM 欠费了怎么办？
-
-每个 Agent 都有 `generate_fallback()` 兜底。规则引擎 + 数据模板照样出可用报告。AI 是锦上添花，工程要保证雪中送炭。
-
----
-
-## ⚡ 快速开始
-
-### 你需要什么
-- **Python 3.11+**
-- **Node.js 18+**（仅前端开发需要）
-- **SiliconFlow API Key**（[免费注册](https://siliconflow.cn)）
-- **[uv](https://docs.astral.sh/uv/)** 包管理器
-
-### 三步跑起来
+### One-Command Launch · 一键启动
 
 ```bash
-# 1. 克隆项目
+# Windows · Windows 系统
+run.bat
+
+# macOS / Linux
+chmod +x run.sh && ./run.sh
+```
+
+### Manual Setup · 手动配置
+
+```bash
 git clone https://github.com/Amazinghorseli/RedNote-Insight.git
 cd RedNote-Insight
-
-# 2. 配置 API Key
-cp .env.example .env
-# 编辑 .env，填入 OPENAI_API_KEY
-
-# 3. 构建前端 + 启动后端
-cd frontend && npm install && npm run build && cd ..
-uv sync
-uv run uvicorn src.api.main:app --port 8000
+cp .env.example .env   # Edit .env with your API key · 编辑 .env 填入 API Key
+uv sync                # Install dependencies · 安装依赖
+uv run python generate_data.py   # Generate demo data · 生成演示数据
+uv run uvicorn api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-浏览器打开 **http://localhost:8000**，FastAPI 自动服务 React SPA。
+Then open · 然后打开 **http://localhost:8000** and **http://localhost:8000/docs** (Swagger).
 
----
-
-## 🔧 开发指南
-
-### 仅后端开发
+### Docker · Docker 部署
 
 ```bash
-uv sync
-uv run uvicorn src.api.main:app --reload --port 8000
-# 访问 http://localhost:8000/docs 调试 API
-```
-
-### 前后端联调（推荐）
-
-开两个终端：
-
-```bash
-# 终端 1：启动 FastAPI
-uv run uvicorn src.api.main:app --reload --port 8000
-```
-
-```bash
-# 终端 2：启动 Vite 开发服务器（HMR 热更新）
-cd frontend
-npm install
-npm run dev
-# 访问 http://localhost:5173
-# Vite 自动代理 /api → localhost:8000
-```
-
-| 端口 | 服务 | 场景 |
-|:----:|------|------|
-| 8000 | FastAPI | 后端开发 / 生产 |
-| 5173 | Vite Dev | 前端热更新开发 |
-
-### 生产构建
-
-```bash
-cd frontend
-npm run build          # 输出到 frontend/dist/
-cd ..
-uv run uvicorn src.api.main:app --port 8000   # FastAPI 自动检测 dist/ 并服务 React SPA
-```
-
----
-
-## 🐳 Docker 部署
-
-```bash
-cp .env.example .env
-vim .env  # 填入 OPENAI_API_KEY
-
-# 先构建前端
-cd frontend && npm install && npm run build && cd ..
-
 docker-compose up -d
-curl http://localhost:8000/api/health
-```
-
-| 服务 | 端口 |
-|------|:----:|
-| API | 8000 |
-| PostgreSQL | 5432 |
-| Redis | 6379 |
-
----
-
-## 🔌 API 文档
-
-启动后访问 **http://localhost:8000/docs**（Swagger UI）
-
-| 端点 | 方法 | 说明 |
-|------|:----:|------|
-| `/api/health` | GET | 健康检查 |
-| `/api/insight/stream` | POST | **SSE 流式双报告**（选品+选题） |
-| `/api/insight` | POST | 单次洞察报告 |
-| `/api/qa/stream` | POST | 流式问答 |
-| `/api/qa` | POST | 单次问答 |
-| `/api/opportunities` | GET | 品类机会排行 |
-| `/api/trending` | GET | 搜索热词 |
-| `/api/inspiration` | GET | 灵感库（支持 `?category=美妆`） |
-| `/api/crawl` | POST | 触发数据抓取 |
-| `/api/trending/refresh` | POST | 刷新热词 |
-
-### 流式双报告示例
-
-```bash
-curl -N -X POST http://localhost:8000/api/insight/stream \
-  -H "Content-Type: application/json" \
-  -d '{"category":"辣条"}'
 ```
 
 ---
 
-## 📁 项目结构
+## Tech Stack · 技术栈
+
+| Layer · 层级 | Technology · 技术 | Purpose · 用途 |
+|-------------|-------------------|----------------|
+| Frontend · 前端 | React 18, Vite 5, SSE | SPA with real-time streaming · 流式双报告 UI |
+| Backend · 后端 | FastAPI, Pydantic v2 | Async API with dependency injection · 全异步 API |
+| LLM · 大模型 | **DeepSeek V4** | Report generation · 双报告生成 |
+| Embedding · 向量 | BGE-M3 | Semantic search for Chinese text · 中文语义检索 |
+| Retrieval · 检索 | BM25 + RRF + CrossEncoder | Hybrid retrieval pipeline · 混合检索引擎 |
+| Vector DB · 向量库 | ChromaDB / pgvector | Comment storage & search · 评论存储与检索 |
+| Task Queue · 任务 | Celery + Redis | Async ingestion & monitoring · 异步数据导入与监测 |
+| Database · 数据库 | PostgreSQL | Business metrics & snapshots · 经营指标与快照 |
+| Testing · 测试 | pytest, Vitest | 140 unit tests + E2E · 140 项单测 |
+| Infra · 基础设施 | Docker, GitHub Actions | CI/CD pipeline · 持续集成 |
+
+---
+
+## API · 接口
+
+| Endpoint | Method | Description · 描述 |
+|----------|--------|---------------------|
+| `/api/insight/stream` | POST | Generate dual reports via SSE · SSE 流式生成双报告 |
+| `/api/insight` | POST | Generate reports (non-streaming) · 非流式生成报告 |
+| `/api/qa` | POST | Q&A over report data · 报告数据问答 |
+| `/api/trending` | GET | Trending topics & alerts · 趋势话题与告警 |
+| `/api/inspiration` | GET | Inspiration library entries · 灵感库条目 |
+| `/health` | GET | Health check · 健康检查 |
+
+Full docs · 完整文档: **http://localhost:8000/docs**
+
+---
+
+## Project Structure · 项目结构
 
 ```
 RedNote-Insight/
-├── frontend/                     # ⚛️ React + Vite 前端（v3.0）
-│   ├── index.html
-│   ├── package.json
-│   ├── vite.config.js            # 代理 /api → localhost:8000
-│   └── src/
-│       ├── main.jsx              # React 入口
-│       ├── App.jsx               # 布局：侧边栏 + 双Tab 内容区
-│       ├── api/client.js         # fetch/SSE 封装（7 个端点）
-│       ├── context/AppContext.jsx # useReducer 全局状态
-│       ├── hooks/
-│       │   ├── useSSE.js         # ReadableStream SSE 核心
-│       │   ├── useSearchHistory.js
-│       │   └── useDebounce.js
-│       ├── components/
-│       │   ├── Sidebar.jsx       # 灵感库/发现机会 标签切换
-│       │   ├── SearchBox.jsx     # 输入 + 快搜 + 历史 + 锁
-│       │   ├── TrendingTags.jsx  # 热词 + 刷新
-│       │   ├── RankingsList.jsx  # 品类排行 + 评分
-│       │   ├── HotlistBoard.jsx  # 灵感库 + 品类筛选
-│       │   ├── DetailOverlay.jsx # 双Tab 弹窗 + SSE
-│       │   ├── MarkdownRenderer.jsx
-│       │   ├── ToastContainer.jsx
-│       │   └── Skeleton.jsx
-│       ├── styles/style.css
-│       └── utils/
-│           ├── markdown.js
-│           └── constants.js
+├── frontend/              # React 18 + Vite 5 (9 components)
 ├── src/
-│   ├── api/
-│   │   ├── main.py              # FastAPI 应用组装 + SPA fallback
-│   │   ├── dependencies.py      # 依赖注入
-│   │   └── routes/
-│   │       ├── health.py
-│   │       ├── qa.py / qa_stream.py
-│   │       ├── insight.py / insight_stream.py  # ★ 双报告 SSE
-│   │       ├── crawl.py
-│   │       ├── opportunities.py
-│   │       ├── trending.py
-│   │       └── inspiration.py
-│   ├── core/
-│   │   ├── state.py             # AppState 容器
-│   │   ├── prompt_loader.py     # Prompt 加载器
-│   │   ├── database.py          # PG 向量库适配
-│   │   └── query_utils.py       # 查询清洗
-│   ├── agents/
-│   │   ├── comment_agent.py     # 评论分析
-│   │   ├── demand_agent.py      # 需求聚合
-│   │   ├── insight_agent.py     # 选品生成
-│   │   └── creator_agent.py     # ★ 选题生成
-│   ├── data/inspiration.py      # ★ 灵感库（189条）
-│   ├── prompts/                 # Prompt YAML
-│   ├── retrievers.py            # 混合检索 + RRF + Reranker
-│   ├── ingestion.py             # 文档加载 + 向量化
-│   ├── crawler.py / real_crawler.py
-│   ├── config.py
-│   └── logger.py
-├── static/                      # 旧版原生 JS 前端（保留，dist 不存在时回退）
-│   ├── index.html
-│   ├── css/style.css
-│   └── js/app.js                # 1289 行原始实现
-├── tests/
-├── data/                        # 向量库 + 爬虫数据
+│   ├── api/               # FastAPI routes (11 routes)
+│   ├── agents/            # InsightGenerator, CreatorGenerator, comment/demand agents
+│   ├── prompts/           # YAML-managed prompt templates
+│   ├── data/              # Inspiration library (189 curated directions)
+│   ├── domain/            # Pydantic models & schemas
+│   ├── pipelines/         # Ingestion & monitoring pipelines
+│   ├── repositories/      # Data access layer
+│   ├── retrievers.py      # Hybrid retrieval + RRF + reranker
+│   ├── config.py          # Settings via pydantic-settings
+│   └── crawler.py         # Data collection
+├── tests/                 # 140 unit tests
+├── data/                  # Demo data & ChromaDB
 ├── Dockerfile
 ├── docker-compose.yml
-├── pyproject.toml
-└── README.md
+├── run.bat / run.sh       # One-click launchers
+└── pyproject.toml
 ```
 
-> ★ = v2.0 新增 | ⚛️ = v3.0 新增
+---
+
+## Roadmap · 路线图
+
+- [x] Hybrid RAG retrieval (BGE-M3 + BM25 + RRF + CrossEncoder)
+- [x] Dual Agent SSE streaming
+- [x] ReportGuard trusted generation
+- [x] React + Vite frontend migration
+- [x] Inspiration library (189 curated directions)
+- [x] Docker + CI/CD pipeline
+- [x] Upgrade to DeepSeek V4
+- [ ] Public demo deployment
+- [ ] Multi-platform review support (Douyin, Taobao)
+- [ ] Real-time trend monitoring dashboard
 
 ---
 
-## 🗺️ 路线图
-
-| 阶段 | 内容 | 状态 |
-|------|------|:----:|
-| RAG 管道 + FastAPI + 混合检索 | 核心引擎 | ✅ |
-| 真实爬虫 + 全异步 + 依赖注入 | 数据基础 | ✅ |
-| SSE 流式双报告 + 灵感库 + 双按钮前端 | v2.0 核心 | ✅ |
-| React + Vite 前端重构 | v3.0 前端现代化 | ✅ |
-| PG+pgvector 生产部署 | 规模升级 | 📋 |
-| 图片视频内容分析 + 小程序 | 生态扩展 | 📋 |
-
----
-
-## 📄 开源协议
+## License · 许可
 
 MIT © 2026
+
+---
+
+<p align="center">
+  <sub>Built with ❤️ for makers and sellers · 为创业者和卖家而生</sub>
+</p>
