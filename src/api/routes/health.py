@@ -1,5 +1,7 @@
 """health.py — 健康检查 + 统计端点"""
+
 from fastapi import APIRouter, Depends
+
 from src.api.dependencies import get_app_state
 from src.core.state import AppState
 

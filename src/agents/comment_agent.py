@@ -8,20 +8,21 @@ comment_agent.py - 评论分析智能体
 2. 解析 YAML 格式的评论分析数据
 3. 输出结构化的分析结果
 """
+
 import re
-import yaml
-from typing import List, Optional
 from pathlib import Path
+
+import yaml
 from langchain_core.documents import Document
 
 
 class CommentAnalyzer:
     """分析笔记评论区，提取用户真实需求信号"""
 
-    def __init__(self, raw_dir: Optional[str] = None):
+    def __init__(self, raw_dir: str | None = None):
         self.raw_dir = raw_dir
 
-    def analyze(self, documents: List[Document]) -> List[dict]:
+    def analyze(self, documents: list[Document]) -> list[dict]:
         """
         从检索到的文档中提取评论分析数据。
 
@@ -98,7 +99,7 @@ class CommentAnalyzer:
 
     # ---- 内部方法 ----
 
-    def _resolve_source(self, doc: Document) -> Optional[Path]:
+    def _resolve_source(self, doc: Document) -> Path | None:
         """从 Document metadata 中解析原始文件路径"""
         source = doc.metadata.get("source", "")
         if not source:

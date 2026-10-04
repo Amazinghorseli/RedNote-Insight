@@ -2,23 +2,27 @@
 ingestion.py - 文档加载 + 向量库构建
 合并自原 step01_ingestion + step02_vectorstore
 """
-import os
-from langchain_community.document_loaders import TextLoader, DirectoryLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
 
-from src.config import RAW_DIR, CHROMA_DIR, EMBEDDING_CONFIG
+import os
+
+from langchain_chroma import Chroma
+from langchain_community.document_loaders import DirectoryLoader, TextLoader
+from langchain_core.documents import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from src.config import CHROMA_DIR, EMBEDDING_CONFIG, RAW_DIR
 from src.logger import logger
 
-
 # ===== 文档清洗 =====
+
 
 def _extract_fm_prefix(text: str) -> str:
     """从 frontmatter 中提取品牌/价格关键信息，返回元数据前缀文本"""
     import re
+
     import yaml as _yaml
+
     fm_match = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
     if not fm_match:
         return ""
@@ -43,6 +47,7 @@ def _extract_fm_prefix(text: str) -> str:
 def _clean_frontmatter(text: str) -> str:
     """统一的 frontmatter + HTML 注释清理，保留关键元数据到文本前缀"""
     import re
+
     prefix = _extract_fm_prefix(text)
     text = re.sub(r"^---\s*\n.*?\n---\s*\n", "", text, count=1, flags=re.DOTALL)
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
@@ -132,17 +137,19 @@ def incremental_ingest(raw_dir: str, vectorstore: Chroma) -> list:
     用法：
         new_chunks = incremental_ingest(str(RAW_DIR), vectorstore)
     """
-    from langchain_community.document_loaders import TextLoader, DirectoryLoader
+    from langchain_community.document_loaders import DirectoryLoader, TextLoader
 
     # 1. 加载所有 .md 文件（包括已有的，Chromadb 内置去重）
     loader = DirectoryLoader(
-        str(raw_dir), glob="**/*.md",
+        str(raw_dir),
+        glob="**/*.md",
         loader_cls=TextLoader,
         loader_kwargs={"encoding": "utf-8"},
         show_progress=False,
     )
     loader_txt = DirectoryLoader(
-        str(raw_dir), glob="**/*.txt",
+        str(raw_dir),
+        glob="**/*.txt",
         loader_cls=TextLoader,
         loader_kwargs={"encoding": "utf-8"},
         show_progress=False,
@@ -170,16 +177,18 @@ def rebuild_all_chunks(raw_dir: str) -> list:
     重新加载全部文档并 chunk，用于重建 BM25 索引。
     返回完整的 chunks 列表。
     """
-    from langchain_community.document_loaders import TextLoader, DirectoryLoader
+    from langchain_community.document_loaders import DirectoryLoader, TextLoader
 
     loader = DirectoryLoader(
-        str(raw_dir), glob="**/*.md",
+        str(raw_dir),
+        glob="**/*.md",
         loader_cls=TextLoader,
         loader_kwargs={"encoding": "utf-8"},
         show_progress=False,
     )
     loader_txt = DirectoryLoader(
-        str(raw_dir), glob="**/*.txt",
+        str(raw_dir),
+        glob="**/*.txt",
         loader_cls=TextLoader,
         loader_kwargs={"encoding": "utf-8"},
         show_progress=False,
@@ -196,14 +205,16 @@ def rebuild_all_chunks(raw_dir: str) -> list:
 # PostgreSQL + pgvector 异步 Ingestion
 # ================================================================
 
+
 async def ingest_to_pg(raw_dir: str = None) -> int:
     """将所有文档 embedding 后写入 PostgreSQL + pgvector
 
     异步版本，直接写入 PG 替代 ChromaDB。
     返回写入的文档数。
     """
-    from src.core.database import get_db, insert_documents, init_db
-    from langchain_community.document_loaders import TextLoader, DirectoryLoader
+    from langchain_community.document_loaders import DirectoryLoader, TextLoader
+
+    from src.core.database import get_db, init_db, insert_documents
 
     if raw_dir is None:
         raw_dir = str(RAW_DIR)
@@ -213,13 +224,15 @@ async def ingest_to_pg(raw_dir: str = None) -> int:
 
     # 2. 加载文档
     loader = DirectoryLoader(
-        raw_dir, glob="**/*.md",
+        raw_dir,
+        glob="**/*.md",
         loader_cls=TextLoader,
         loader_kwargs={"encoding": "utf-8"},
         show_progress=False,
     )
     loader_txt = DirectoryLoader(
-        raw_dir, glob="**/*.txt",
+        raw_dir,
+        glob="**/*.txt",
         loader_cls=TextLoader,
         loader_kwargs={"encoding": "utf-8"},
         show_progress=False,
@@ -238,16 +251,17 @@ async def ingest_to_pg(raw_dir: str = None) -> int:
     logger.info(f"embedding {len(texts)} chunks...")
 
     # 批量 embedding（每次最多 100 条，避免 API 超限）
-    BATCH_SIZE = 100
+    batch_size = 100
     total_inserted = 0
 
     async for session in get_db():
-        for i in range(0, len(texts), BATCH_SIZE):
-            batch_texts = texts[i:i + BATCH_SIZE]
-            batch_chunks = chunks[i:i + BATCH_SIZE]
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i : i + batch_size]
+            batch_chunks = chunks[i : i + batch_size]
 
             # embed 在 event loop 外执行（OAI embedding 是同步的）
             import asyncio
+
             loop = asyncio.get_running_loop()
             batch_embeddings = await loop.run_in_executor(
                 None, lambda: embeddings_model.embed_documents(batch_texts)
@@ -266,9 +280,10 @@ async def incremental_ingest_to_pg(raw_dir: str = None) -> int:
 
     返回新插入的文档数。
     """
-    from src.core.database import get_db, insert_documents, init_db, DocumentTable
+    from langchain_community.document_loaders import DirectoryLoader, TextLoader
     from sqlalchemy import select
-    from langchain_community.document_loaders import TextLoader, DirectoryLoader
+
+    from src.core.database import DocumentTable, get_db, init_db, insert_documents
 
     if raw_dir is None:
         raw_dir = str(RAW_DIR)
@@ -285,13 +300,15 @@ async def incremental_ingest_to_pg(raw_dir: str = None) -> int:
 
     # 2. 加载新文档
     loader = DirectoryLoader(
-        raw_dir, glob="**/*.md",
+        raw_dir,
+        glob="**/*.md",
         loader_cls=TextLoader,
         loader_kwargs={"encoding": "utf-8"},
         show_progress=False,
     )
     loader_txt = DirectoryLoader(
-        raw_dir, glob="**/*.txt",
+        raw_dir,
+        glob="**/*.txt",
         loader_cls=TextLoader,
         loader_kwargs={"encoding": "utf-8"},
         show_progress=False,
@@ -313,15 +330,16 @@ async def incremental_ingest_to_pg(raw_dir: str = None) -> int:
     embeddings_model = get_embeddings()
 
     texts = [chunk.page_content for chunk in chunks]
-    BATCH_SIZE = 100
+    batch_size = 100
     total_inserted = 0
 
     async for session in get_db():
-        for i in range(0, len(texts), BATCH_SIZE):
-            batch_texts = texts[i:i + BATCH_SIZE]
-            batch_chunks = chunks[i:i + BATCH_SIZE]
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i : i + batch_size]
+            batch_chunks = chunks[i : i + batch_size]
 
             import asyncio
+
             loop = asyncio.get_running_loop()
             batch_embeddings = await loop.run_in_executor(
                 None, lambda: embeddings_model.embed_documents(batch_texts)

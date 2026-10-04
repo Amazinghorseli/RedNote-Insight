@@ -54,8 +54,8 @@ EXPOSE 8000
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
+    CMD [".venv/bin/python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8000/api/health', timeout=5)"]
 
 # 启动命令
-CMD [".venv/bin/uv", "run", "uvicorn", "src.api.main:app", \
+CMD [".venv/bin/python", "-m", "uvicorn", "src.api.main:app", \
      "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]

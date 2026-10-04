@@ -3,7 +3,9 @@ dependencies.py — FastAPI 依赖注入
 ====================================
 所有 API 端点通过 Depends(get_app_state) 获取 AppState。
 """
-from fastapi import Request, HTTPException
+
+from fastapi import HTTPException, Request
+
 from src.core.state import AppState
 
 
@@ -19,4 +21,3 @@ async def get_app_state(request: Request) -> AppState:
 async def get_app_state_or_none(request: Request) -> AppState:
     """不抛 503 的版本，供内部调用方自行处理"""
     return request.app.state.app_state
-

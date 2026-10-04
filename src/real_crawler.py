@@ -9,25 +9,27 @@ real_crawler.py — 小红书真实数据爬虫 (Phase 2)
 首次运行会打开浏览器窗口，请手动扫码登录。登录后 cookie 会保存，
 后续运行自动复用，无需重复登录。
 """
-import os
-import sys
+
+import argparse
 import json
-import time
+import os
 import random
 import re
-import argparse
-from pathlib import Path
+import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from DrissionPage import ChromiumPage, ChromiumOptions
-from src.config import RAW_DIR
+from DrissionPage import ChromiumOptions, ChromiumPage
 
+from src.config import RAW_DIR
 
 # ============================================================
 # 配置
 # ============================================================
-COOKIE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "cookies.json")
+COOKIE_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "cookies.json"
+)
 SEARCH_URL = "https://www.xiaohongshu.com/search_result?keyword={}&source=web_search_result_notes"
 
 
@@ -44,15 +46,16 @@ class XHSCrawler:
         self.cookies_json = cookies_json  # 云端模式：从 secrets 传入的 cookie JSON
         self._logged_in = False
         self._is_cloud = self._detect_cloud()
-        self._need_relogin = False   # search() 发现登录弹窗时设为 True
+        self._need_relogin = False  # search() 发现登录弹窗时设为 True
         self._init_browser()
 
     @staticmethod
     def _detect_cloud() -> bool:
         """检测是否运行在 Streamlit Cloud 环境"""
         # Streamlit Cloud 设置了 STREAMLIT_SERVER_ADDRESS 环境变量
-        return bool(os.environ.get("STREAMLIT_SERVER_ADDRESS")) or \
-               bool(os.environ.get("STREAMLIT_RUNTIME"))
+        return bool(os.environ.get("STREAMLIT_SERVER_ADDRESS")) or bool(
+            os.environ.get("STREAMLIT_RUNTIME")
+        )
 
     def _init_browser(self):
         """初始化浏览器，尝试复用已保存的登录态"""
@@ -64,19 +67,28 @@ class XHSCrawler:
         co.set_argument("--disable-features=VizDisplayCompositor")
         co.set_argument("--window-size=1920,1080")
         # 随机化 User-Agent，避免被识别为爬虫
-        ua = random.choice([
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        ])
+        ua = random.choice(
+            [
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            ]
+        )
         co.set_user_agent(ua)
 
         if self._is_cloud or self.headless:
             co.headless(True)
             # Streamlit Cloud 上 Chromium 的安装路径
             if self._is_cloud:
-                for browser_path in ["/usr/bin/chromium-browser", "/usr/bin/chromium",
-                                     "/usr/bin/google-chrome", "/usr/bin/chrome"]:
+                for browser_path in [
+                    "/usr/bin/chromium-browser",
+                    "/usr/bin/chromium",
+                    "/usr/bin/google-chrome",
+                    "/usr/bin/chrome",
+                ]:
                     if os.path.exists(browser_path):
                         co.set_browser_path(browser_path)
                         print(f"[Crawler] [Cloud] 云端模式，使用: {browser_path}")
@@ -140,7 +152,7 @@ class XHSCrawler:
         # 2. 本地模式：从文件加载
         if not cookies and os.path.exists(COOKIE_FILE):
             try:
-                with open(COOKIE_FILE, "r", encoding="utf-8") as f:
+                with open(COOKIE_FILE, encoding="utf-8") as f:
                     cookies = json.load(f)
                 print(f"[Crawler] [File] 从文件加载了 {len(cookies)} 个 cookie")
             except Exception as e:
@@ -177,9 +189,14 @@ class XHSCrawler:
 
         self._logged_in = False
         if self._is_cloud:
-            print("[Crawler] [Cloud] 云端未登录。请在本地导出 cookie 并配置 Streamlit Secrets: XHS_COOKIES")
+            print(
+                "[Crawler] [Cloud] 云端未登录。请在本地导出 cookie "
+                "并配置 Streamlit Secrets: XHS_COOKIES"
+            )
         else:
-            print("[Crawler] [WARN] 未登录。请运行: uv run python src/real_crawler.py \"品类名\" 来登录")
+            print(
+                '[Crawler] [WARN] 未登录。请运行: uv run python src/real_crawler.py "品类名" 来登录'
+            )
 
     def _is_login_modal_shown(self) -> bool:
         """检查当前页面是否显示了登录弹窗（CSS 检测 + HTML 文本兜底）"""
@@ -262,7 +279,15 @@ class XHSCrawler:
 
             # 方法1: 检查是否存在小红书认证 cookie
             xhs_cookies = self.page.cookies(all_domains=True, all_info=False)
-            auth_cookie_names = {"a1", "web_session", "session", "sid", "authorization", "token", "xhs"}
+            auth_cookie_names = {
+                "a1",
+                "web_session",
+                "session",
+                "sid",
+                "authorization",
+                "token",
+                "xhs",
+            }
             for cookie in xhs_cookies:
                 name = cookie.get("name", "").lower()
                 if name in auth_cookie_names:
@@ -411,7 +436,10 @@ class XHSCrawler:
 
         if login_still_shown:
             print("[Crawler] [Search] [WARN] 登录弹窗持续存在，请重新登录")
-            print("[Crawler] [Search] 已登录状态可能已过期，建议运行: uv run python src/real_crawler.py")
+            print(
+                "[Crawler] [Search] 已登录状态可能已过期，建议运行: "
+                "uv run python src/real_crawler.py"
+            )
             # 即使弹窗还在，也尝试抓取（可能弹窗背后有内容）
 
         # ===== 策略 A (首选): 用浏览器 fetch() 直接调搜索 API =====
@@ -448,13 +476,15 @@ class XHSCrawler:
                     nid = item.get("id", "")
                     if nid and nid not in seen_ids:
                         seen_ids.add(nid)
-                        notes.append({
-                            "id": nid,
-                            "title": item.get("title", f"{keyword}_{nid[:8]}"),
-                            "url": f"https://www.xiaohongshu.com/explore/{nid}",
-                            "likes": item.get("likes", 0),
-                            "author": item.get("author", ""),
-                        })
+                        notes.append(
+                            {
+                                "id": nid,
+                                "title": item.get("title", f"{keyword}_{nid[:8]}"),
+                                "url": f"https://www.xiaohongshu.com/explore/{nid}",
+                                "likes": item.get("likes", 0),
+                                "author": item.get("author", ""),
+                            }
+                        )
                 print(f"[Crawler] [Search] [OK] API 搜索到 {len(notes)} 篇笔记")
             else:
                 print(f"[Crawler] [Search] [WARN] API 返回异常: {str(api_notes_raw)[:100]}")
@@ -465,7 +495,6 @@ class XHSCrawler:
         if not notes:
             print("[Crawler] [Search] API 无结果，退回到页面解析...")
             no_new = 0
-            last_count = 0
             max_scrolls = max(count // 3, 30)
             scroll_count = 0
 
@@ -475,22 +504,22 @@ class XHSCrawler:
                 time.sleep(random.uniform(1.5, 3.0))
 
                 page_html = self.page.html or ""
-                hex_ids = re.findall(r'/explore/([a-f0-9]{24})', page_html)
+                hex_ids = re.findall(r"/explore/([a-f0-9]{24})", page_html)
                 if hex_ids:
                     seen_ids = {n["id"] for n in notes}
                     for note_id in hex_ids:
                         if note_id not in seen_ids:
                             seen_ids.add(note_id)
-                            notes.append({
-                                "id": note_id,
-                                "title": f"{keyword}_{note_id[:8]}",
-                                "url": f"https://www.xiaohongshu.com/explore/{note_id}",
-                            })
+                            notes.append(
+                                {
+                                    "id": note_id,
+                                    "title": f"{keyword}_{note_id[:8]}",
+                                    "url": f"https://www.xiaohongshu.com/explore/{note_id}",
+                                }
+                            )
                     no_new = 0
-                    last_count = len(notes)
                 else:
                     no_new += 1
-                last_count = len(notes)
                 print(f"\r[Crawler]   已发现 {len(notes)} 篇...", end="")
 
         print(f"\n[Crawler] [OK] 搜索完成，共 {len(notes[:count])} 篇笔记")
@@ -498,7 +527,9 @@ class XHSCrawler:
         # 如果一篇都没找到且有登录弹窗 → 需要重新登录
         if not notes and self._is_login_modal_shown():
             self._need_relogin = True
-            print("[Crawler] [Search] [WARN] 搜索到 0 篇笔记 + 登录弹窗 -> cookie 过期，需要重新登录")
+            print(
+                "[Crawler] [Search] [WARN] 搜索到 0 篇笔记 + 登录弹窗 -> cookie 过期，需要重新登录"
+            )
         else:
             self._need_relogin = False
 
@@ -509,8 +540,12 @@ class XHSCrawler:
         try:
             page_text = self.page.text or ""
             blocked_keywords = [
-                "暂时无法浏览", "请打开小红书App扫码查看", "扫码查看",
-                "小红书如何扫码", "问题反馈", "返回首页",
+                "暂时无法浏览",
+                "请打开小红书App扫码查看",
+                "扫码查看",
+                "小红书如何扫码",
+                "问题反馈",
+                "返回首页",
             ]
             matches = sum(1 for kw in blocked_keywords if kw in page_text)
             return matches >= 3  # 匹配到 3 个以上关键词才判定为被拦截
@@ -544,12 +579,16 @@ class XHSCrawler:
             """
             raw = self.page.run_js(js)
             import json
-            if raw and raw.startswith('{'):
+
+            if raw and raw.startswith("{"):
                 data = json.loads(raw)
                 result.update(data)
-                print(f"        [API] [OK] 获取内容成功（{len(result['content'])} 字符，{result['likes']} 赞）")
-            elif raw and 'NO_DATA' in str(raw):
-                print(f"        [API] [WARN] API 返回空数据")
+                print(
+                    f"        [API] [OK] 获取内容成功（{len(result['content'])} 字符，"
+                    f"{result['likes']} 赞）"
+                )
+            elif raw and "NO_DATA" in str(raw):
+                print("        [API] [WARN] API 返回空数据")
             else:
                 print(f"        [API] [WARN] 失败: {str(raw)[:80]}")
         except Exception as e:
@@ -559,7 +598,7 @@ class XHSCrawler:
 
     def get_note_detail(self, note: dict) -> dict:
         """获取单篇笔记的正文内容 — API 优先"""
-        title_short = note.get('title', '')[:30]
+        title_short = note.get("title", "")[:30]
         note_id = note.get("id", "")
         print(f"[Crawler] [Page] {title_short}...")
 
@@ -580,7 +619,7 @@ class XHSCrawler:
                 time.sleep(1)
             blocked = self._is_note_page_blocked()
             if blocked:
-                print(f"        [WARN] 被拦截，放弃此篇")
+                print("        [WARN] 被拦截，放弃此篇")
                 note["content"] = note.get("content", "")
                 note["likes"] = note.get("likes", 0)
                 note["author"] = note.get("author", "")
@@ -588,8 +627,13 @@ class XHSCrawler:
 
             # 获取正文
             content = ""
-            for desc_sel in ["css:#detail-desc", "css:.note-text", "css:.desc",
-                             "css:.note-scroller", "css:.content"]:
+            for desc_sel in [
+                "css:#detail-desc",
+                "css:.note-text",
+                "css:.desc",
+                "css:.note-scroller",
+                "css:.content",
+            ]:
                 try:
                     desc_el = self.page.ele(desc_sel)
                     if desc_el:
@@ -601,8 +645,11 @@ class XHSCrawler:
 
             likes = 0
             try:
-                for like_sel in ["css:.like-wrapper .count", "css:.like .count",
-                                 "css:.interact-item .count"]:
+                for like_sel in [
+                    "css:.like-wrapper .count",
+                    "css:.like .count",
+                    "css:.interact-item .count",
+                ]:
                     like_el = self.page.ele(like_sel)
                     if like_el:
                         likes = int(re.sub(r"\D", "", like_el.text) or "0")
@@ -661,7 +708,7 @@ class XHSCrawler:
             }})()
             """
             raw = self.page.run_js(js)
-            if raw and raw.startswith('['):
+            if raw and raw.startswith("["):
                 comments = json.loads(raw)
                 print(f"        [API] [OK] 评论 API 获取到 {len(comments)} 条")
                 return comments
@@ -690,7 +737,7 @@ class XHSCrawler:
         api_comments = self._try_fetch_comments_via_api(note_id)
         if api_comments:
             if level == "hot":
-                return api_comments[:max(5, max_comments // 3)]
+                return api_comments[: max(5, max_comments // 3)]
             elif level == "top":
                 return api_comments[:max_comments]  # API 返回的顶级在前
             return api_comments[:max_comments]
@@ -720,7 +767,7 @@ class XHSCrawler:
                     "css:.comment-list > .comment-item > .content",
                     "css:.comments-wrapper > .comment-item > .content",
                     "css:.note-scroller > .comment-item > .content",
-                    "css:.comment-item > .content",           # 兜底：所有 comment-item 的直接子 content
+                    "css:.comment-item > .content",  # 兜底：所有 comment-item 的直接子 content
                 ]
             elif level == "hot":
                 # 热评：通常排在前几条，只取前 1/3
@@ -754,8 +801,10 @@ class XHSCrawler:
             if not comment_els:
                 # 全量抓取
                 for sel in [
-                    "css:.comment-item .content", "css:.comment-content",
-                    "css:.comments .content", "css:.note-comment .content",
+                    "css:.comment-item .content",
+                    "css:.comment-content",
+                    "css:.comments .content",
+                    "css:.note-comment .content",
                 ]:
                     try:
                         found = self.page.eles(sel)
@@ -776,14 +825,22 @@ class XHSCrawler:
                             grandparent = parent.parent() if parent else None
                             gp_classes = grandparent.attr("class") or "" if grandparent else ""
                             # 如果父/祖父元素包含 reply/sub/child 关键词，跳过
-                            if any(k in parent_classes.lower() for k in ["reply", "sub", "child", "二级"]):
+                            if any(
+                                k in parent_classes.lower()
+                                for k in ["reply", "sub", "child", "二级"]
+                            ):
                                 continue
-                            if any(k in gp_classes.lower() for k in ["reply", "sub", "child", "二级"]):
+                            if any(
+                                k in gp_classes.lower() for k in ["reply", "sub", "child", "二级"]
+                            ):
                                 continue
                             filtered.append(el)
                         except Exception:
                             filtered.append(el)
-                    print(f"[Crawler] [Comments] DOM 过滤后: {len(filtered)}/{len(comment_els)} 条一级评论")
+                    print(
+                        "[Crawler] [Comments] DOM 过滤后: "
+                        f"{len(filtered)}/{len(comment_els)} 条一级评论"
+                    )
                     comment_els = filtered
 
             # 提取文本
@@ -797,9 +854,11 @@ class XHSCrawler:
 
             # 热评模式：只取前 1/3（按页面排序，热评在前）
             if level == "hot":
-                comments = comments[:max(5, max_comments // 3)]
+                comments = comments[: max(5, max_comments // 3)]
 
-            print(f"[Crawler] [Comments] 获取到 {len(comments[:max_comments])} 条评论 (level={level})")
+            print(
+                f"[Crawler] [Comments] 获取到 {len(comments[:max_comments])} 条评论 (level={level})"
+            )
         except Exception as e:
             print(f"        [WARN] 评论获取失败: {e}")
 
@@ -813,8 +872,9 @@ class XHSCrawler:
         import yaml
 
         # 分析评论
-        complaints, purchase_intents, comparison_mentions, high_freq_words = \
-            self._analyze_comments(comments or [])
+        complaints, purchase_intents, comparison_mentions, high_freq_words = self._analyze_comments(
+            comments or []
+        )
 
         # 构建 frontmatter（与 generate_data.py 格式一致）
         frontmatter = {
@@ -840,8 +900,11 @@ class XHSCrawler:
             "purchase_intent": purchase_intents[:10],
             "comparison_mentions": comparison_mentions[:5],
             "related_brands": [category],
-            "ask_link_count": sum(1 for c in (comments or [])
-                                  if any(kw in c for kw in ["链接", "在哪买", "求", "想要"])),
+            "ask_link_count": sum(
+                1
+                for c in (comments or [])
+                if any(kw in c for kw in ["链接", "在哪买", "求", "想要"])
+            ),
         }
 
         ecommerce = {
@@ -864,10 +927,14 @@ class XHSCrawler:
             "",
             "---",
             "<!--",
-            yaml.dump({
-                "comment_analysis": comment_analysis,
-                "ecommerce": ecommerce,
-            }, allow_unicode=True, default_flow_style=False).strip(),
+            yaml.dump(
+                {
+                    "comment_analysis": comment_analysis,
+                    "ecommerce": ecommerce,
+                },
+                allow_unicode=True,
+                default_flow_style=False,
+            ).strip(),
             "-->",
         ]
 
@@ -888,17 +955,66 @@ class XHSCrawler:
         all_words = []
 
         complaint_kw = [
-            "太贵", "不好", "差", "烂", "后悔", "千万别", "踩雷", "坑", "不行",
-            "小", "短", "丑", "慢", "掉", "坏", "退", "缺点", "失望", "难用",
-            "不值", "垃圾", "无语", "鸡肋", "智商税", "浪费", "别买", "慎入",
-            "不好用", "有问题", "坏了", "掉了", "破了", "不推荐", "避雷",
+            "太贵",
+            "不好",
+            "差",
+            "烂",
+            "后悔",
+            "千万别",
+            "踩雷",
+            "坑",
+            "不行",
+            "小",
+            "短",
+            "丑",
+            "慢",
+            "掉",
+            "坏",
+            "退",
+            "缺点",
+            "失望",
+            "难用",
+            "不值",
+            "垃圾",
+            "无语",
+            "鸡肋",
+            "智商税",
+            "浪费",
+            "别买",
+            "慎入",
+            "不好用",
+            "有问题",
+            "坏了",
+            "掉了",
+            "破了",
+            "不推荐",
+            "避雷",
         ]
         intent_kw = [
-            "想买", "求链接", "在哪买", "多少钱", "推荐", "种草", "求", "想要",
-            "怎么买", "哪里买", "想入", "好想要", "被种草", "下单", "链接",
+            "想买",
+            "求链接",
+            "在哪买",
+            "多少钱",
+            "推荐",
+            "种草",
+            "求",
+            "想要",
+            "怎么买",
+            "哪里买",
+            "想入",
+            "好想要",
+            "被种草",
+            "下单",
+            "链接",
         ]
         comparison_kw = [
-            "比", "不如", "还是", "更", "不如买", "对比", "选择",
+            "比",
+            "不如",
+            "还是",
+            "更",
+            "不如买",
+            "对比",
+            "选择",
         ]
 
         for c in comments:
@@ -916,12 +1032,15 @@ class XHSCrawler:
 
         # 简单高频词统计
         from collections import Counter
+
         word_counts = Counter(all_words)
         high_freq = [w for w, _ in word_counts.most_common(15)]
 
         return complaints, purchase_intents, comparison_mentions, high_freq
 
-    def crawl(self, category: str, count: int = 30, with_comments: bool = True, comment_level: str = "all"):
+    def crawl(
+        self, category: str, count: int = 30, with_comments: bool = True, comment_level: str = "all"
+    ):
         """完整抓取流程
 
         Args:
@@ -931,21 +1050,23 @@ class XHSCrawler:
             comment_level: 评论层级 ("all" / "top" / "hot")
         """
         if not self._logged_in:
-            msg = ("[Crawler] [FAIL] 未登录，无法抓取\n"
-                   "[Crawler] [Hint] 本地: uv run python src/real_crawler.py \"品类名\" 登录\n"
-                   "[Crawler] [Hint] 云端: 在 Streamlit Secrets 中配置 XHS_COOKIES")
+            msg = (
+                "[Crawler] [FAIL] 未登录，无法抓取\n"
+                '[Crawler] [Hint] 本地: uv run python src/real_crawler.py "品类名" 登录\n'
+                "[Crawler] [Hint] 云端: 在 Streamlit Secrets 中配置 XHS_COOKIES"
+            )
             print(msg)
             return 0
 
         os.makedirs(RAW_DIR, exist_ok=True)
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"[Crawler] [Crawl]  开始抓取: {category}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         # 1. 搜索笔记（如发现需重新登录，自动触发一次登录后重试）
-        MAX_RETRIES = 1
-        for attempt in range(MAX_RETRIES + 1):
+        max_retries = 1
+        for attempt in range(max_retries + 1):
             notes = self.search(category, count)
             if notes:
                 break  # 找到笔记 → 继续
@@ -954,7 +1075,9 @@ class XHSCrawler:
                 # 不是因为登录弹窗导致的空结果 → 不重试
                 break
 
-            print(f"\n[Crawler] [Crawl] [RETRY] cookie 已过期，尝试重新登录（第{attempt+1}次）...")
+            print(
+                f"\n[Crawler] [Crawl] [RETRY] cookie 已过期，尝试重新登录（第{attempt + 1}次）..."
+            )
             self._logged_in = False  # 强制设为未登录态
             if not self._is_cloud:
                 if not self.login_interactive():
@@ -962,7 +1085,9 @@ class XHSCrawler:
                     return 0
                 print("[Crawler] [OK] 重新登录成功，重新搜索...")
             else:
-                print("[Crawler] [FAIL] 云端模式下 cookie 过期，请更新 Streamlit Secrets XHS_COOKIES")
+                print(
+                    "[Crawler] [FAIL] 云端模式下 cookie 过期，请更新 Streamlit Secrets XHS_COOKIES"
+                )
                 return 0
 
         if not notes:
@@ -973,7 +1098,7 @@ class XHSCrawler:
         saved = 0
         print(f"\n[Crawler] [Crawl] 搜索到 {len(notes)} 篇笔记，开始逐篇抓取详情...")
         for i, note in enumerate(notes):
-            print(f"\n[Crawler] [{i+1}/{len(notes)}] {note.get('title', '')[:40]}")
+            print(f"\n[Crawler] [{i + 1}/{len(notes)}] {note.get('title', '')[:40]}")
 
             try:
                 note = self.get_note_detail(note)
@@ -992,6 +1117,7 @@ class XHSCrawler:
             except Exception as e:
                 print(f"        [ERR] 处理笔记失败: {e}")
                 import traceback
+
                 traceback.print_exc()
                 # 尝试保存一个基础版本
                 try:
@@ -1014,7 +1140,7 @@ class XHSCrawler:
         策略 B: 探索页热门笔记标题提取关键词
         策略 C: 兜底内置词库
         """
-        print(f"\n[Crawler] [HotSearch] 开始抓取小红书热榜...")
+        print("\n[Crawler] [HotSearch] 开始抓取小红书热榜...")
         items = []
 
         try:
@@ -1044,8 +1170,6 @@ class XHSCrawler:
 
             if search_clicked:
                 time.sleep(3)  # 等下拉面板渲染
-                page_html = self.page.html or ""
-
                 # 方法 1: 面板文本提取
                 panel_texts = []
                 for panel_sel in [
@@ -1084,7 +1208,13 @@ class XHSCrawler:
                             continue
 
                     if suggest_els:
-                        combined = " ".join([el.text.strip() for el in suggest_els if el.text and len(el.text.strip()) >= 2])
+                        combined = " ".join(
+                            [
+                                el.text.strip()
+                                for el in suggest_els
+                                if el.text and len(el.text.strip()) >= 2
+                            ]
+                        )
                         if combined:
                             panel_texts = [combined]
 
@@ -1093,33 +1223,36 @@ class XHSCrawler:
                     seen_keywords = set()
                     rank = 0
                     for pt in panel_texts:
-                        for line in pt.replace('\t', '\n').split('\n'):
+                        for line in pt.replace("\t", "\n").split("\n"):
                             kw = line.strip()
                             # 清理：去掉数字前缀、热度标记等
                             import re as re_mod
-                            kw = re_mod.sub(r'^\d+[\.\、\)\s]*', '', kw)
-                            kw = re_mod.sub(r'\s*(热|新|荐|HOT|爆)$', '', kw)
+
+                            kw = re_mod.sub(r"^\d+[\.\、\)\s]*", "", kw)
+                            kw = re_mod.sub(r"\s*(热|新|荐|HOT|爆)$", "", kw)
                             kw = kw.strip()
 
                             if not kw or len(kw) < 2 or len(kw) > 25:
                                 continue
                             if kw in seen_keywords:
                                 continue
-                            if re_mod.match(r'^[\d\.\s\-—，,]+$', kw):
+                            if re_mod.match(r"^[\d\.\s\-—，,]+$", kw):
                                 continue
-                            if '小红书' in kw or '登录' in kw or '注册' in kw:
+                            if "小红书" in kw or "登录" in kw or "注册" in kw:
                                 continue
 
                             seen_keywords.add(kw)
                             rank += 1
-                            items.append({
-                                "keyword": kw,
-                                "rank": rank,
-                                "tag": "热" if rank <= 5 else ("新" if rank <= 15 else ""),
-                                "category": self._guess_category(kw),
-                                "trend": "up" if rank <= 10 else "stable",
-                                "hots": max(100 - rank * 3, 10),
-                            })
+                            items.append(
+                                {
+                                    "keyword": kw,
+                                    "rank": rank,
+                                    "tag": "热" if rank <= 5 else ("新" if rank <= 15 else ""),
+                                    "category": self._guess_category(kw),
+                                    "trend": "up" if rank <= 10 else "stable",
+                                    "hots": max(100 - rank * 3, 10),
+                                }
+                            )
                             if len(items) >= max_items:
                                 break
                         if len(items) >= max_items:
@@ -1160,8 +1293,14 @@ class XHSCrawler:
                     # 从页面链接提取
                     try:
                         links = self.page.eles("css:a[href*='/explore/']", timeout=3)
-                        note_links = [l for l in links if l and l.text and len(l.text.strip()) > 3
-                                     and 'footer' not in (getattr(l, 'parent', None) or '')]
+                        note_links = [
+                            link
+                            for link in links
+                            if link
+                            and link.text
+                            and len(link.text.strip()) > 3
+                            and "footer" not in (getattr(link, "parent", None) or "")
+                        ]
                         title_els = note_links
                         print(f"[Crawler] [HotSearch] 探索页链接提取: {len(title_els)} 条")
                     except Exception:
@@ -1169,19 +1308,55 @@ class XHSCrawler:
 
                 # 过滤页面 chrome（导航、版权、菜单等）
                 blacklist = {
-                    "创作中心", "业务合作", "关于我们", "联系我们", "用户协议",
-                    "隐私政策", "举报", "帮助", "反馈", "登录", "注册",
-                    "首页", "发现", "消息", "通知", "我", "搜索",
-                    "下载", "APP", "小程序", "桌面版", "手机版",
-                    "关注", "推荐", "热门", "最新", "商品", "店铺",
-                    "收藏", "点赞", "评论", "分享", "更多",
-                    "小红书", "沪ICP", "ICP备", "备案", "版权所有",
-                    "Cookie", "隐私", "条款", "广告", "推广",
+                    "创作中心",
+                    "业务合作",
+                    "关于我们",
+                    "联系我们",
+                    "用户协议",
+                    "隐私政策",
+                    "举报",
+                    "帮助",
+                    "反馈",
+                    "登录",
+                    "注册",
+                    "首页",
+                    "发现",
+                    "消息",
+                    "通知",
+                    "我",
+                    "搜索",
+                    "下载",
+                    "APP",
+                    "小程序",
+                    "桌面版",
+                    "手机版",
+                    "关注",
+                    "推荐",
+                    "热门",
+                    "最新",
+                    "商品",
+                    "店铺",
+                    "收藏",
+                    "点赞",
+                    "评论",
+                    "分享",
+                    "更多",
+                    "小红书",
+                    "沪ICP",
+                    "ICP备",
+                    "备案",
+                    "版权所有",
+                    "Cookie",
+                    "隐私",
+                    "条款",
+                    "广告",
+                    "推广",
                 }
 
                 # 从标题提取关键词
                 title_keywords = {}
                 import re as re_mod
+
                 for el in title_els[:60]:
                     try:
                         t = el.text.strip()
@@ -1192,9 +1367,11 @@ class XHSCrawler:
                             continue
 
                         # 拆分提取有意义的词组
-                        for kw in re_mod.split(r'[，。,\.、\s#＃｜|【】\[\]（）\(\)]+', t):
+                        for kw in re_mod.split(r"[，。,\.、\s#＃｜|【】\[\]（）\(\)]+", t):
                             kw = kw.strip()
-                            if 2 <= len(kw) <= 15 and not re_mod.match(r'^[\d\.\s\-—，,、/\?？！!]+$', kw):
+                            if 2 <= len(kw) <= 15 and not re_mod.match(
+                                r"^[\d\.\s\-—，,、/\?？！!]+$", kw
+                            ):
                                 if kw not in blacklist:
                                     title_keywords[kw] = title_keywords.get(kw, 0) + 1
                     except Exception:
@@ -1208,14 +1385,16 @@ class XHSCrawler:
                     if kw in existing or len(kw) < 2 or kw in blacklist:
                         continue
                     rank += 1
-                    items.append({
-                        "keyword": kw,
-                        "rank": rank,
-                        "tag": "热" if rank <= 5 else "",
-                        "category": self._guess_category(kw),
-                        "trend": "up" if freq >= 3 else "stable",
-                        "hots": min(freq * 25, 100),
-                    })
+                    items.append(
+                        {
+                            "keyword": kw,
+                            "rank": rank,
+                            "tag": "热" if rank <= 5 else "",
+                            "category": self._guess_category(kw),
+                            "trend": "up" if freq >= 3 else "stable",
+                            "hots": min(freq * 25, 100),
+                        }
+                    )
                     existing.add(kw)
                     if len(items) >= max_items:
                         break
@@ -1233,6 +1412,7 @@ class XHSCrawler:
         except Exception as e:
             print(f"[Crawler] [HotSearch] 异常: {e}")
             import traceback
+
             traceback.print_exc()
             items = self._fallback_hot_list()
 
@@ -1242,15 +1422,37 @@ class XHSCrawler:
     def _guess_category(text: str) -> str:
         """根据关键词猜测品类"""
         cat_map = {
-            "穿搭": "服饰", "衣服": "服饰", "裙子": "服饰", "鞋": "服饰",
-            "化妆": "美妆", "护肤": "美妆", "口红": "美妆", "面膜": "美妆",
-            "零食": "食品", "吃": "食品", "蛋糕": "食品", "奶茶": "食品",
-            "家居": "家居", "收纳": "家居", "装修": "家居", "灯": "家居",
-            "手机": "数码", "耳机": "数码", "电脑": "数码",
-            "健身": "运动", "运动": "运动", "瑜伽": "运动",
-            "猫": "宠物", "狗": "宠物", "宠物": "宠物",
-            "旅行": "旅游", "旅游": "旅游", "酒店": "旅游",
-            "养娃": "母婴", "宝宝": "母婴", "孕": "母婴",
+            "穿搭": "服饰",
+            "衣服": "服饰",
+            "裙子": "服饰",
+            "鞋": "服饰",
+            "化妆": "美妆",
+            "护肤": "美妆",
+            "口红": "美妆",
+            "面膜": "美妆",
+            "零食": "食品",
+            "吃": "食品",
+            "蛋糕": "食品",
+            "奶茶": "食品",
+            "家居": "家居",
+            "收纳": "家居",
+            "装修": "家居",
+            "灯": "家居",
+            "手机": "数码",
+            "耳机": "数码",
+            "电脑": "数码",
+            "健身": "运动",
+            "运动": "运动",
+            "瑜伽": "运动",
+            "猫": "宠物",
+            "狗": "宠物",
+            "宠物": "宠物",
+            "旅行": "旅游",
+            "旅游": "旅游",
+            "酒店": "旅游",
+            "养娃": "母婴",
+            "宝宝": "母婴",
+            "孕": "母婴",
         }
         for kw, cat in cat_map.items():
             if kw in text:
@@ -1261,22 +1463,44 @@ class XHSCrawler:
     def _fallback_hot_list() -> list[dict]:
         """兜底热榜（极简内置词库，避免空榜）"""
         fallback = [
-            "穿搭", "化妆", "护肤", "减肥", "健身",
-            "收纳", "装修", "零食", "奶茶", "咖啡",
-            "穿搭灵感", "显瘦穿搭", "平价好物", "家居好物", "数码好物",
-            "通勤穿搭", "早春穿搭", "夜间护肤", "抗老", "美白",
-            "宠物用品", "旅行攻略", "本地美食", "周末去哪儿", "读书推荐",
+            "穿搭",
+            "化妆",
+            "护肤",
+            "减肥",
+            "健身",
+            "收纳",
+            "装修",
+            "零食",
+            "奶茶",
+            "咖啡",
+            "穿搭灵感",
+            "显瘦穿搭",
+            "平价好物",
+            "家居好物",
+            "数码好物",
+            "通勤穿搭",
+            "早春穿搭",
+            "夜间护肤",
+            "抗老",
+            "美白",
+            "宠物用品",
+            "旅行攻略",
+            "本地美食",
+            "周末去哪儿",
+            "读书推荐",
         ]
         items = []
         for i, kw in enumerate(fallback):
-            items.append({
-                "keyword": kw,
-                "rank": i + 1,
-                "tag": "热" if i < 5 else "",
-                "category": XHSCrawler._guess_category(kw),
-                "trend": "up" if i < 10 else "stable",
-                "hots": max(100 - i * 3, 15),
-            })
+            items.append(
+                {
+                    "keyword": kw,
+                    "rank": i + 1,
+                    "tag": "热" if i < 5 else "",
+                    "category": XHSCrawler._guess_category(kw),
+                    "trend": "up" if i < 10 else "stable",
+                    "hots": max(100 - i * 3, 15),
+                }
+            )
         return items
 
     def close(self):

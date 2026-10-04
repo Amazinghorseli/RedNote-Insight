@@ -5,28 +5,39 @@ main.py — FastAPI 应用组装
 
 启动: uv run uvicorn src.api.main:app --port 8000
 """
-import sys
+
 import os
-import uuid
+import sys
 import traceback
-from pathlib import Path
+import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
 from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from src.api.routes import (
+    crawl,
+    health,
+    insight,
+    insight_stream,
+    inspiration,
+    opportunities,
+    qa,
+    qa_stream,
+    trending,
+)
 from src.config import settings
 from src.core.state import init_app_state
-from src.api.routes import health, qa, insight, crawl, qa_stream, insight_stream, opportunities, trending, inspiration
-
 
 # ===== 中间件 =====
+
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """为每个请求注入 X-Request-ID，绑定到 structlog"""
@@ -75,6 +86,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # ===== 生命周期 =====
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用启动时初始化 AppState，关闭时清理"""
@@ -103,16 +115,18 @@ app = FastAPI(
 if settings.rate_limit_enabled:
     try:
         from slowapi import Limiter, _rate_limit_exceeded_handler
-        from slowapi.util import get_remote_address
         from slowapi.errors import RateLimitExceeded
+        from slowapi.util import get_remote_address
 
         limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
         app.state.limiter = limiter
         app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
         import structlog
+
         structlog.get_logger().info("rate_limit_enabled")
     except ImportError:
         import structlog
+
         structlog.get_logger().warning("rate_limit_skipped", reason="slowapi_not_installed")
 
 # ---- 注册中间件（顺序重要）----
@@ -146,6 +160,7 @@ react_assets = react_dist / "assets"
 if react_assets.is_dir():
     app.mount("/assets", StaticFiles(directory=str(react_assets)), name="react_assets")
 
+
 # 统一前端入口：dist 优先 > static 回退
 @app.get("/")
 async def serve_frontend_root():
@@ -154,16 +169,21 @@ async def serve_frontend_root():
         return FileResponse(str(react_dist / "index.html"))
     if static_dir.exists():
         return FileResponse(str(static_dir / "index.html"))
-    return JSONResponse({"message": "Frontend not built. Run: cd frontend && npm run build"}, status_code=404)
+    return JSONResponse(
+        {"message": "Frontend not built. Run: cd frontend && npm run build"}, status_code=404
+    )
+
 
 # SPA fallback: 非 API 路径回退到 index.html（仅生产模式）
 if react_dist.is_dir():
+
     @app.get("/{full_path:path}")
     async def serve_react_spa(full_path: str):
         file_path = react_dist / full_path
         if full_path and file_path.is_file():
             return FileResponse(str(file_path))
         return FileResponse(str(react_dist / "index.html"))
+
 
 # 开发回退：托管旧 static/ 目录
 if static_dir.exists() and not react_dist.is_dir():
@@ -172,6 +192,7 @@ if static_dir.exists() and not react_dist.is_dir():
 
 if __name__ == "__main__":
     import uvicorn
+
     print("RedNote Insight API starting...")
     print("   API:   http://localhost:8000")
     print("   Front: http://localhost:8000")

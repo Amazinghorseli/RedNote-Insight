@@ -12,22 +12,22 @@ v2: 跳过 graph 管道，直接检索 + 流式生成，速度提升 3-5x。
       -d '{"question":"磁吸感应灯哪个品牌好"}'
 """
 
+import asyncio
 import json
 import time
-import re
-import asyncio
+
+import jieba
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel
 
 from src.api.dependencies import get_app_state
-from src.core.state import AppState
 from src.config import LLM_CONFIG
-from src.logger import logger
 from src.core.prompt_loader import get_prompt_loader
-import jieba
-from src.core.query_utils import clean_query, is_brand_comparison, resolve_k, resolve_bm25_k
+from src.core.query_utils import clean_query, is_brand_comparison
+from src.core.state import AppState
+from src.logger import logger
 
 router = APIRouter(tags=["qa-stream"])
 
@@ -47,21 +47,37 @@ BRAND_K = 8
 
 
 # ── 通用疑问词（不参与相关性判断）──
-_QUESTION_STOP = {"哪个", "哪款", "哪家", "品牌", "推荐", "好", "什么", "怎么", "如何", "多少", "对比", "测评", "排行", "有没有", "值得", "建议", "选择", "区别"}
+_QUESTION_STOP = {
+    "哪个",
+    "哪款",
+    "哪家",
+    "品牌",
+    "推荐",
+    "好",
+    "什么",
+    "怎么",
+    "如何",
+    "多少",
+    "对比",
+    "测评",
+    "排行",
+    "有没有",
+    "值得",
+    "建议",
+    "选择",
+    "区别",
+}
 
 
 def _any_doc_relevant(query: str, docs: list, threshold: int = 1) -> bool:
     """快速相关性检查：至少 threshold 篇文档包含查询中的品类关键词"""
     # 只取有意义的品类词（排除通用疑问词和短词）
-    q_words = set(
-        w for w in jieba.cut(query)
-        if len(w) > 1 and w not in _QUESTION_STOP
-    )
+    q_words = set(w for w in jieba.cut(query) if len(w) > 1 and w not in _QUESTION_STOP)
     if not q_words:
         return True  # 全是疑问词时放行
     hits = 0
     for d in docs:
-        content = d.page_content if hasattr(d, 'page_content') else str(d)
+        content = d.page_content if hasattr(d, "page_content") else str(d)
         if any(w in content for w in q_words):
             hits += 1
             if hits >= threshold:
@@ -86,7 +102,7 @@ async def run_qa_stream(req: QAStreamRequest, state: AppState = Depends(get_app_
             is_brand = is_brand_comparison(cleaned)
             k = BRAND_K if is_brand else BASE_K
 
-            yield _sse_event("stage", {"stage": "retrieve", "message": f"正在检索..."})
+            yield _sse_event("stage", {"stage": "retrieve", "message": "正在检索..."})
             await asyncio.sleep(0)
 
             # ── 阶段 2: 直连检索 ──
@@ -94,18 +110,23 @@ async def run_qa_stream(req: QAStreamRequest, state: AppState = Depends(get_app_
                 cleaned, k=k, bm25_k=max(40, k * 5), final_k=k
             )
 
-            yield _sse_event("stage", {
-                "stage": "retrieved",
-                "message": f"检索到 {len(docs)} 篇文档",
-                "doc_count": len(docs),
-            })
+            yield _sse_event(
+                "stage",
+                {
+                    "stage": "retrieved",
+                    "message": f"检索到 {len(docs)} 篇文档",
+                    "doc_count": len(docs),
+                },
+            )
             await asyncio.sleep(0)
 
             # ── 相关性门禁：无匹配时直接返回 ──
             if docs and not _any_doc_relevant(cleaned, docs, threshold=1):
                 yield _sse_event("token", {"token": _NO_DATA_MSG})
                 elapsed = round(time.time() - t0, 2)
-                yield _sse_event("done", {"answer": _NO_DATA_MSG, "elapsed": elapsed, "doc_count": 0})
+                yield _sse_event(
+                    "done", {"answer": _NO_DATA_MSG, "elapsed": elapsed, "doc_count": 0}
+                )
                 return
 
             # ── 阶段 3: Rerank 重排序 ──
@@ -113,19 +134,24 @@ async def run_qa_stream(req: QAStreamRequest, state: AppState = Depends(get_app_
             await asyncio.sleep(0)
 
             from src.config import RERANKER_THRESHOLD
+
             scores = await state.reranker.arerank(cleaned, docs)
             scored = sorted(
                 [(d, s) for d, s in zip(docs, scores) if s >= RERANKER_THRESHOLD],
-                key=lambda x: x[1], reverse=True
+                key=lambda x: x[1],
+                reverse=True,
             )
             docs = [d for d, _ in scored] if scored else docs[:5]
             logger.info(f"rerank: {len(scored)}/{len(scores)} docs above threshold")
 
-            yield _sse_event("stage", {
-                "stage": "reranked",
-                "message": f"重排序完成，保留 {len(docs)} 篇高相关文档",
-                "doc_count": len(docs),
-            })
+            yield _sse_event(
+                "stage",
+                {
+                    "stage": "reranked",
+                    "message": f"重排序完成，保留 {len(docs)} 篇高相关文档",
+                    "doc_count": len(docs),
+                },
+            )
             await asyncio.sleep(0)
 
             # ── 阶段 4: 流式生成 ──
@@ -133,7 +159,7 @@ async def run_qa_stream(req: QAStreamRequest, state: AppState = Depends(get_app_
 
             if docs:
                 context = "\n---\n".join(
-                    f"[文档{i+1}] {d.page_content}" for i, d in enumerate(docs)
+                    f"[文档{i + 1}] {d.page_content}" for i, d in enumerate(docs)
                 )
             else:
                 context = "暂无相关文档"
@@ -153,11 +179,14 @@ async def run_qa_stream(req: QAStreamRequest, state: AppState = Depends(get_app_
 
             # ── 阶段 4: 完成 ──
             elapsed = round(time.time() - t0, 2)
-            yield _sse_event("done", {
-                "answer": full_answer,
-                "elapsed": elapsed,
-                "doc_count": len(docs),
-            })
+            yield _sse_event(
+                "done",
+                {
+                    "answer": full_answer,
+                    "elapsed": elapsed,
+                    "doc_count": len(docs),
+                },
+            )
 
         except Exception as e:
             logger.error(f"qa_stream_error: {e}")

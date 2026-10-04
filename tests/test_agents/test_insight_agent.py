@@ -1,10 +1,13 @@
 """
 test_insight_agent.py — InsightGenerator 单元测试
 """
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-import sys
+
 import os
+import sys
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 
@@ -40,12 +43,14 @@ class TestInsightGenerator:
 
     def test_instantiation(self):
         from src.agents.insight_agent import InsightGenerator
+
         gen = InsightGenerator()
         assert gen is not None
         assert gen.llm is not None
 
     def test_generate_fallback_basic(self):
         from src.agents.insight_agent import InsightGenerator
+
         gen = InsightGenerator()
         aggregated = self._make_aggregated()
         report = gen.generate_fallback(aggregated, category="磁吸感应灯")
@@ -55,12 +60,14 @@ class TestInsightGenerator:
 
     def test_generate_fallback_empty_data(self):
         from src.agents.insight_agent import InsightGenerator
+
         gen = InsightGenerator()
         report = gen.generate_fallback({"note_count": 0}, category="测试")
         assert "没有足够的评论数据" in report
 
     def test_generate_fallback_low_score_warning(self):
         from src.agents.insight_agent import InsightGenerator
+
         gen = InsightGenerator()
         aggregated = self._make_aggregated(selection_score=30, competition_score=20)
         report = gen.generate_fallback(aggregated, category="红海品类")
@@ -70,6 +77,7 @@ class TestInsightGenerator:
     async def test_agenerate_returns_report(self):
         """agenerate() 应返回报告文本"""
         from src.agents.insight_agent import InsightGenerator
+
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock()
         mock_llm.ainvoke.return_value.content = "测试报告内容"
