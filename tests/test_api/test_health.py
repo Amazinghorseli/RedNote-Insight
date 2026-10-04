@@ -1,13 +1,14 @@
 """
 test_health.py — API 健康检查 + 统计端点测试
 """
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 
 class MockAppState:
     """模拟已初始化的 AppState"""
+
     is_ready = True
     error = None
     stats = {
@@ -20,6 +21,7 @@ class MockAppState:
 @pytest.fixture
 def app():
     from src.api.main import app
+
     app.state.app_state = MockAppState()
     return app
 
@@ -60,10 +62,12 @@ async def test_stats_returns_data(app):
 async def test_stats_503_when_not_ready():
     """GET /api/stats — 未初始化应返回 503"""
     from src.api.main import app
+
     # 用 not-ready 的 mock
     class NotReady:
         is_ready = False
         error = "未初始化"
+
     app.state.app_state = NotReady()
 
     transport = ASGITransport(app=app)

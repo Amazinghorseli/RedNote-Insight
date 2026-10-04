@@ -5,9 +5,10 @@ GET /api/inspiration           → 返回全部灵感
 GET /api/inspiration?category=美妆 → 按品类筛选
 GET /api/inspiration/categories → 列出所有品类
 """
+
 from fastapi import APIRouter, Query
 
-from src.data.inspiration import get_inspiration, get_categories
+from src.data.inspiration import get_categories, get_inspiration
 
 router = APIRouter(prefix="/api/inspiration", tags=["inspiration"])
 

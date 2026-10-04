@@ -1,9 +1,12 @@
 """
 test_demand_agent.py — DemandAggregator 单元测试
 """
-import pytest
-import sys
+
 import os
+import sys
+
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.agents.demand_agent import DemandAggregator
@@ -57,15 +60,17 @@ class TestDemandAggregator:
 
     def test_single_analysis_basic_stats(self):
         agg = DemandAggregator()
-        result = agg.aggregate([
-            _make_analysis(
-                complaints=["太贵了", "质量差"],
-                purchase_intent=["想买"],
-                related_brands=["品牌A"],
-                ask_link_count=3,
-                likes=100,
-            )
-        ])
+        result = agg.aggregate(
+            [
+                _make_analysis(
+                    complaints=["太贵了", "质量差"],
+                    purchase_intent=["想买"],
+                    related_brands=["品牌A"],
+                    ask_link_count=3,
+                    likes=100,
+                )
+            ]
+        )
         assert result["note_count"] == 1
         assert result["avg_likes"] == 100.0
         assert result["total_ask_link"] == 3
@@ -98,47 +103,59 @@ class TestDemandAggregator:
     def test_profit_score_high_margin(self):
         """高利润率应得高利润分"""
         agg = DemandAggregator()
-        result = agg.aggregate([
-            _make_analysis(price=100, cost=10, profit_margin=0.9),
-        ])
+        result = agg.aggregate(
+            [
+                _make_analysis(price=100, cost=10, profit_margin=0.9),
+            ]
+        )
         assert result["profit_score"] >= 70
 
     def test_profit_score_low_margin(self):
         """低利润率应得低利润分"""
         agg = DemandAggregator()
-        result = agg.aggregate([
-            _make_analysis(price=50, cost=45, profit_margin=0.1),
-        ])
+        result = agg.aggregate(
+            [
+                _make_analysis(price=50, cost=45, profit_margin=0.1),
+            ]
+        )
         assert result["profit_score"] < 60
 
     def test_weight_affects_logistics_score(self):
         """重量越大物流分越低"""
         agg_light = DemandAggregator()
-        r_light = agg_light.aggregate([
-            _make_analysis(weight=0.1),
-        ])
+        r_light = agg_light.aggregate(
+            [
+                _make_analysis(weight=0.1),
+            ]
+        )
         agg_heavy = DemandAggregator()
-        r_heavy = agg_heavy.aggregate([
-            _make_analysis(weight=2.0),
-        ])
+        r_heavy = agg_heavy.aggregate(
+            [
+                _make_analysis(weight=2.0),
+            ]
+        )
         assert r_light["logistics_score"] >= r_heavy["logistics_score"]
 
     def test_low_competition_boosts_score(self):
         """低竞争品类竞争分更高"""
         agg = DemandAggregator()
-        result = agg.aggregate([
-            _make_analysis(competition_level="低", entry_difficulty="低"),
-            _make_analysis(competition_level="低", entry_difficulty="低"),
-        ])
+        result = agg.aggregate(
+            [
+                _make_analysis(competition_level="低", entry_difficulty="低"),
+                _make_analysis(competition_level="低", entry_difficulty="低"),
+            ]
+        )
         assert result["competition_score"] >= 60
 
     def test_evergreen_ratio_calculation(self):
         agg = DemandAggregator()
-        result = agg.aggregate([
-            _make_analysis(category_type="常青款"),
-            _make_analysis(category_type="常青款"),
-            _make_analysis(category_type="季节性"),
-        ])
+        result = agg.aggregate(
+            [
+                _make_analysis(category_type="常青款"),
+                _make_analysis(category_type="常青款"),
+                _make_analysis(category_type="季节性"),
+            ]
+        )
         assert result["evergreen_ratio"] == pytest.approx(2 / 3, abs=0.01)
 
     def test_empty_analysis_produces_fallback(self):

@@ -1,6 +1,8 @@
 """insight.py — 选品洞察端点"""
-import time
+
 import asyncio
+import time
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
@@ -31,23 +33,27 @@ async def run_insight(req: InsightRequest, state: AppState = Depends(get_app_sta
     result = await _run_insight_async(req.category, state, mode=req.mode)
     elapsed = round(time.time() - t0, 2)
     return InsightResponse(
-        success=True, category=req.category, mode=req.mode,
-        report=result["report"], notes_count=result["notes_count"],
-        generated_count=result["generated_count"], elapsed=elapsed,
+        success=True,
+        category=req.category,
+        mode=req.mode,
+        report=result["report"],
+        notes_count=result["notes_count"],
+        generated_count=result["generated_count"],
+        elapsed=elapsed,
     )
 
 
 async def _run_insight_async(query: str, state: AppState, mode: str = "selection") -> dict:
     """执行洞察管道（全异步）"""
     from src.agents.comment_agent import CommentAnalyzer
+    from src.agents.creator_agent import CreatorGenerator
     from src.agents.demand_agent import DemandAggregator
     from src.agents.insight_agent import InsightGenerator
-    from src.agents.creator_agent import CreatorGenerator
     from src.config import RERANKER_THRESHOLD
     from src.crawler import CrawlerInterface
 
-    MIN_NOTES = 10
-    CRAWL_COUNT = 30
+    min_notes = 10
+    crawl_count = 30
 
     async def _do_insight(docs, category):
         analyzer = CommentAnalyzer(raw_dir=state.raw_dir)
@@ -67,7 +73,9 @@ async def _run_insight_async(query: str, state: AppState, mode: str = "selection
             report += f"\n\n（注：LLM 生成失败，使用模板兜底。错误：{e}）"
         return report
 
-    docs = await state.hybrid_retriever.ahybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
+    docs = await state.hybrid_retriever.ahybrid_search(
+        query, k=min_notes, bm25_k=40, final_k=min_notes
+    )
     if not docs:
         docs = []
 
@@ -89,36 +97,53 @@ async def _run_insight_async(query: str, state: AppState, mode: str = "selection
                 else:
                     return {
                         "report": f"知识库无「{query}」数据，且爬虫未登录。\n\n"
-                                  f"请使用流式接口（POST /api/insight/stream）触发交互式登录，\n"
-                                  f"或先在命令行运行:\n"
-                                  f"  uv run python src/real_crawler.py \"{query}\"\n"
-                                  f"完成登录后再试。",
-                        "notes_count": 0, "generated_count": 0,
+                        f"请使用流式接口（POST /api/insight/stream）触发交互式登录，\n"
+                        f"或先在命令行运行:\n"
+                        f'  uv run python src/real_crawler.py "{query}"\n'
+                        f"完成登录后再试。",
+                        "notes_count": 0,
+                        "generated_count": 0,
                     }
             else:
                 return {
                     "report": f"知识库无「{query}」数据，且爬虫不可用。\n\n"
-                              f"请先在命令行运行 `uv run python src/real_crawler.py \"{query}\"` 登录并抓取数据。",
-                    "notes_count": 0, "generated_count": 0,
+                    "请先在命令行运行 `uv run python "
+                    f'src/real_crawler.py "{query}"` 登录并抓取数据。',
+                    "notes_count": 0,
+                    "generated_count": 0,
                 }
 
-        result = await asyncio.to_thread(crawler.crawl, query, CRAWL_COUNT)
+        result = await asyncio.to_thread(crawler.crawl, query, crawl_count)
         crawled_count = result["count"]
         if crawled_count == 0:
-            return {"report": f"抱歉，无法从小红书获取「{query}」的数据。", "notes_count": 0, "generated_count": 0}
+            return {
+                "report": f"抱歉，无法从小红书获取「{query}」的数据。",
+                "notes_count": 0,
+                "generated_count": 0,
+            }
 
         await state.rebuild_indexes()
         await asyncio.sleep(0.5)
 
-        fresh_docs = await state.hybrid_retriever.ahybrid_search(query, k=MIN_NOTES, bm25_k=40, final_k=MIN_NOTES)
+        fresh_docs = await state.hybrid_retriever.ahybrid_search(
+            query, k=min_notes, bm25_k=40, final_k=min_notes
+        )
         fresh_scores = await state.reranker.arerank(query, fresh_docs) if fresh_docs else []
-        fresh_relevant = [doc for doc, s in zip(fresh_docs, fresh_scores) if s >= RERANKER_THRESHOLD]
+        fresh_relevant = [
+            doc for doc, s in zip(fresh_docs, fresh_scores) if s >= RERANKER_THRESHOLD
+        ]
         if not fresh_relevant:
-            return {"report": f"已从小红书抓取 {crawled_count} 篇笔记，但检索仍未匹配。", "notes_count": 0, "generated_count": crawled_count}
+            return {
+                "report": f"已从小红书抓取 {crawled_count} 篇笔记，但检索仍未匹配。",
+                "notes_count": 0,
+                "generated_count": crawled_count,
+            }
 
         report = await _do_insight(fresh_relevant, query)
         report = f"（📥 已从小红书实时抓取「{query}」{crawled_count} 篇真实笔记）\n\n{report}"
 
-    return {"report": report,
-            "notes_count": len(relevant) if crawled_count == 0 else len(fresh_relevant),
-            "generated_count": crawled_count}
+    return {
+        "report": report,
+        "notes_count": len(relevant) if crawled_count == 0 else len(fresh_relevant),
+        "generated_count": crawled_count,
+    }

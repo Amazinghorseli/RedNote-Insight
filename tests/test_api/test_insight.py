@@ -1,8 +1,9 @@
 """
 test_insight.py — Insight 端点测试
 """
+
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 
 class MockAppState:
@@ -14,6 +15,7 @@ class MockAppState:
 @pytest.fixture
 def app():
     from src.api.main import app
+
     app.state.app_state = MockAppState()
     return app
 

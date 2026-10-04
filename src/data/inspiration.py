@@ -43,7 +43,11 @@ INSPIRATION = {
         {"keyword": "速食面", "type": "both", "tip": "囤货必选，选题：泡面天花板是哪款"},
         {"keyword": "牛肉干", "type": "selection", "tip": "高蛋白零食溢价高，选品：内蒙古产地直发"},
         {"keyword": "果酒", "type": "both", "tip": "女性微醺经济，选题：10元以内好喝果酒"},
-        {"keyword": "代餐奶昔", "type": "both", "tip": "减脂赛道火爆，选题：喝了一周代餐的真实感受"},
+        {
+            "keyword": "代餐奶昔",
+            "type": "both",
+            "tip": "减脂赛道火爆，选题：喝了一周代餐的真实感受",
+        },
         {"keyword": "火锅底料", "type": "both", "tip": "居家火锅趋势，选题：自制火锅比店里香"},
         {"keyword": "蛋黄酥", "type": "both", "tip": "烘焙零食爆品，选品方向：手工vs工厂代工"},
         {"keyword": "黑芝麻丸", "type": "both", "tip": "养生零食化趋势，选题：黑芝麻丸真的养发吗"},
@@ -80,13 +84,21 @@ INSPIRATION = {
         {"keyword": "瑜伽裤", "type": "both", "tip": "lululemon平替方向，选题：10条平价瑜伽裤横评"},
         {"keyword": "冲锋衣", "type": "both", "tip": "功能性溢价高，选品方向：城市户外风"},
         {"keyword": "风衣", "type": "topic", "tip": "经典款永不过时，选题：不同身材风衣穿搭公式"},
-        {"keyword": "显瘦穿搭", "type": "topic", "tip": "搜索量巨大，选题：苹果型/梨型身材穿搭避雷"},
+        {
+            "keyword": "显瘦穿搭",
+            "type": "topic",
+            "tip": "搜索量巨大，选题：苹果型/梨型身材穿搭避雷",
+        },
         {"keyword": "羽绒服", "type": "both", "tip": "冬季大单品高客单，选题：500元以下羽绒服推荐"},
         {"keyword": "卫衣", "type": "both", "tip": "春秋必备基础款，选题：一周卫衣不重样穿搭"},
         {"keyword": "衬衫", "type": "both", "tip": "通勤刚需，选题：白衬衫的100种穿法"},
         {"keyword": "牛仔裤", "type": "both", "tip": "万能单品，选题：不同腿型牛仔裤选购指南"},
         {"keyword": "连衣裙", "type": "both", "tip": "夏季主力品类，选品：法式碎花裙利润分析"},
-        {"keyword": "西装外套", "type": "both", "tip": "职场穿搭升级，选题：平价西装也能穿出高级感"},
+        {
+            "keyword": "西装外套",
+            "type": "both",
+            "tip": "职场穿搭升级，选题：平价西装也能穿出高级感",
+        },
         {"keyword": "针织衫", "type": "both", "tip": "秋冬百搭单品，选品：不起球针织衫怎么挑"},
         {"keyword": "半身裙", "type": "topic", "tip": "穿搭包容性强，选题：微胖女生半身裙推荐"},
         {"keyword": "打底衫", "type": "both", "tip": "基础款高频复购，选品方向：自发热打底衫"},
@@ -99,7 +111,11 @@ INSPIRATION = {
         {"keyword": "情侣装", "type": "both", "tip": "情感消费溢价高，选题：不土的情侣穿搭"},
     ],
     "数码": [
-        {"keyword": "蓝牙耳机", "type": "both", "tip": "竞争激烈但利润稳，选题：百元以下耳机谁最强"},
+        {
+            "keyword": "蓝牙耳机",
+            "type": "both",
+            "tip": "竞争激烈但利润稳，选题：百元以下耳机谁最强",
+        },
         {"keyword": "手机壳", "type": "both", "tip": "门槛低利润高，选品方向：设计师联名+季节性"},
         {"keyword": "充电宝", "type": "topic", "tip": "实用测评类高收藏，选题：10款充电宝实测"},
         {"keyword": "无线鼠标", "type": "both", "tip": "办公刚需，选品方向：静音+人体工学溢价"},
@@ -107,7 +123,11 @@ INSPIRATION = {
         {"keyword": "键盘", "type": "both", "tip": "客制化赛道火热，选题：机械键盘入门指南"},
         {"keyword": "数据线", "type": "selection", "tip": "高频消耗品，选品：快充数据线走量策略"},
         {"keyword": "平板支架", "type": "both", "tip": "无纸化学习趋势，选题：iPad配件好物推荐"},
-        {"keyword": "手机膜", "type": "selection", "tip": "极致走量品类，选品方向：防窥/蓝光功能膜"},
+        {
+            "keyword": "手机膜",
+            "type": "selection",
+            "tip": "极致走量品类，选品方向：防窥/蓝光功能膜",
+        },
         {"keyword": "蓝牙音箱", "type": "both", "tip": "氛围感好物，选题：百元蓝牙音箱音质横评"},
         {"keyword": "智能手表", "type": "both", "tip": "健康监测刚需，选题：手环VS手表怎么选"},
         {"keyword": "耳机壳", "type": "selection", "tip": "AirPods配件刚需，选品：硅胶耳机壳利润"},
@@ -116,16 +136,36 @@ INSPIRATION = {
         {"keyword": "屏幕挂灯", "type": "both", "tip": "程序员/设计师刚需，选题：屏幕挂灯值得吗"},
         {"keyword": "充电头", "type": "selection", "tip": "快充刚需配件，选品：氮化镓充电器利润"},
         {"keyword": "拓展坞", "type": "both", "tip": "轻薄本必备配件，选题：Type-C拓展坞推荐"},
-        {"keyword": "平板保护套", "type": "selection", "tip": "iPad必备配件，选品：带笔槽保护套溢价"},
+        {
+            "keyword": "平板保护套",
+            "type": "selection",
+            "tip": "iPad必备配件，选品：带笔槽保护套溢价",
+        },
         {"keyword": "车载充电器", "type": "selection", "tip": "汽车配件刚需，选品：双口快充车充"},
         {"keyword": "桌面理线器", "type": "both", "tip": "桌面美学趋势，选题：告别桌面乱线的神器"},
-        {"keyword": "读卡器", "type": "selection", "tip": "摄影/Vlog必备，选品方向：多合一高速读卡器"},
+        {
+            "keyword": "读卡器",
+            "type": "selection",
+            "tip": "摄影/Vlog必备，选品方向：多合一高速读卡器",
+        },
     ],
     "运动": [
-        {"keyword": "健身器材", "type": "both", "tip": "客单价高、利润厚，选品方向：居家小型化趋势"},
+        {
+            "keyword": "健身器材",
+            "type": "both",
+            "tip": "客单价高、利润厚，选品方向：居家小型化趋势",
+        },
         {"keyword": "瑜伽垫", "type": "both", "tip": "入门必备，选题：用了一年最不后悔的瑜伽垫"},
-        {"keyword": "筋膜枪", "type": "both", "tip": "恢复类热门单品，选题：百元筋膜枪VS千元款实测"},
-        {"keyword": "运动内衣", "type": "both", "tip": "女性刚需高频，选题：不同胸型运动内衣怎么选"},
+        {
+            "keyword": "筋膜枪",
+            "type": "both",
+            "tip": "恢复类热门单品，选题：百元筋膜枪VS千元款实测",
+        },
+        {
+            "keyword": "运动内衣",
+            "type": "both",
+            "tip": "女性刚需高频，选题：不同胸型运动内衣怎么选",
+        },
         {"keyword": "哑铃", "type": "both", "tip": "居家健身标配，选品方向：可调节款溢价空间大"},
         {"keyword": "跑步鞋", "type": "topic", "tip": "永不过时，选题：新手第一双跑鞋怎么选"},
         {"keyword": "泡沫轴", "type": "both", "tip": "运动恢复赛道，选题：泡沫轴是智商税吗"},
@@ -136,7 +176,11 @@ INSPIRATION = {
         {"keyword": "运动水壶", "type": "both", "tip": "健身人群刚需，选题：大容量运动水壶测评"},
         {"keyword": "护膝", "type": "both", "tip": "运动防护品类，选题：跑步护膝有没有用"},
         {"keyword": "运动毛巾", "type": "both", "tip": "冷感毛巾夏季爆品，选品方向：速干面料"},
-        {"keyword": "登山杖", "type": "both", "tip": "户外登山装备，选题：登山杖选碳纤维还是铝合金"},
+        {
+            "keyword": "登山杖",
+            "type": "both",
+            "tip": "户外登山装备，选题：登山杖选碳纤维还是铝合金",
+        },
         {"keyword": "滑板", "type": "both", "tip": "潮流运动品类，选题：新手滑板选购指南"},
         {"keyword": "泳衣", "type": "both", "tip": "季节性爆品，选题：不同身材泳衣怎么选"},
         {"keyword": "运动背包", "type": "both", "tip": "健身通勤双场景，选品：干湿分离运动包"},
@@ -146,22 +190,46 @@ INSPIRATION = {
     ],
     "宠物": [
         {"keyword": "猫粮", "type": "both", "tip": "刚需高频复购，选题：成分党教你一眼看懂配料表"},
-        {"keyword": "宠物玩具", "type": "both", "tip": "冲动消费多、利润高，选品：互动型玩具溢价空间"},
+        {
+            "keyword": "宠物玩具",
+            "type": "both",
+            "tip": "冲动消费多、利润高，选品：互动型玩具溢价空间",
+        },
         {"keyword": "猫砂", "type": "topic", "tip": "消耗品测评易火，选题：10款猫砂粉尘对比"},
         {"keyword": "狗粮", "type": "both", "tip": "最大刚需品类，选题：国产狗粮真的不如进口吗"},
         {"keyword": "宠物零食", "type": "both", "tip": "高频复购高毛利，选品：冻干零食工厂代工"},
         {"keyword": "猫爬架", "type": "both", "tip": "大件宠物用品，选品：实木vs剑麻材质利润对比"},
         {"keyword": "宠物窝", "type": "both", "tip": "颜值+功能双需求，选题：四季通用宠物窝推荐"},
-        {"keyword": "宠物自动喂食器", "type": "both", "tip": "智能养宠趋势，选题：自动喂食器出粮实测"},
+        {
+            "keyword": "宠物自动喂食器",
+            "type": "both",
+            "tip": "智能养宠趋势，选题：自动喂食器出粮实测",
+        },
         {"keyword": "宠物梳子", "type": "both", "tip": "换毛季刚需爆品，选题：去浮毛梳子测评"},
-        {"keyword": "宠物衣服", "type": "both", "tip": "宠物拟人化消费，选品：秋冬季宠物服装利润率"},
+        {
+            "keyword": "宠物衣服",
+            "type": "both",
+            "tip": "宠物拟人化消费，选品：秋冬季宠物服装利润率",
+        },
         {"keyword": "猫罐头", "type": "both", "tip": "主食罐VS零食罐，选题：猫咪最爱的罐头排名"},
-        {"keyword": "宠物尿垫", "type": "selection", "tip": "高频消耗品走量，选品：加厚竹炭除臭尿垫"},
+        {
+            "keyword": "宠物尿垫",
+            "type": "selection",
+            "tip": "高频消耗品走量，选品：加厚竹炭除臭尿垫",
+        },
         {"keyword": "宠物航空箱", "type": "both", "tip": "宠物出行必备，选题：猫咪外出包怎么选"},
-        {"keyword": "宠物饮水机", "type": "both", "tip": "活水概念升级，选题：宠物饮水机过滤效果对比"},
+        {
+            "keyword": "宠物饮水机",
+            "type": "both",
+            "tip": "活水概念升级，选题：宠物饮水机过滤效果对比",
+        },
         {"keyword": "宠物牵引绳", "type": "both", "tip": "遛狗刚需，选题：爆冲狗该用什么牵引绳"},
         {"keyword": "猫抓板", "type": "both", "tip": "高频消耗品类，选品：瓦楞纸猫抓板走量"},
-        {"keyword": "宠物湿巾", "type": "both", "tip": "清洁刚需消耗品，选题：宠物专用vs婴儿湿巾对比"},
+        {
+            "keyword": "宠物湿巾",
+            "type": "both",
+            "tip": "清洁刚需消耗品，选题：宠物专用vs婴儿湿巾对比",
+        },
         {"keyword": "鱼粮", "type": "both", "tip": "水族垂直品类，选题：金鱼热带鱼饲料怎么选"},
         {"keyword": "仓鼠笼", "type": "both", "tip": "小宠赛道蓝海，选品：亚克力仓鼠笼溢价空间"},
         {"keyword": "宠物钙片", "type": "both", "tip": "宠物保健品市场，选题：狗狗真的需要补钙吗"},
@@ -169,7 +237,11 @@ INSPIRATION = {
     ],
     "母婴": [
         {"keyword": "婴儿湿巾", "type": "both", "tip": "消耗品高复购，选品方向：天然成分溢价"},
-        {"keyword": "儿童水杯", "type": "both", "tip": "安全诉求溢价高，选题：不同材质儿童水杯对比"},
+        {
+            "keyword": "儿童水杯",
+            "type": "both",
+            "tip": "安全诉求溢价高，选题：不同材质儿童水杯对比",
+        },
         {"keyword": "早教玩具", "type": "topic", "tip": "知识类高收藏，选题：分月龄早教玩具推荐"},
         {"keyword": "纸尿裤", "type": "both", "tip": "母婴第一刚需品，选题：10款纸尿裤吸水性实测"},
         {"keyword": "婴儿推车", "type": "both", "tip": "高客单价大单品，选题：千元推车测评"},
@@ -229,15 +301,17 @@ def get_inspiration(category: str = None) -> list[dict]:
     for cat in categories:
         items = INSPIRATION.get(cat, [])
         for idx, item in enumerate(items):
-            result.append({
-                "keyword": item["keyword"],
-                "type": item["type"],
-                "tip": item["tip"],
-                "category": cat,
-                "rank": idx + 1,
-                "hots": max(95 - idx * 4, 30),
-                "trend": "up" if idx < 3 else "stable",
-            })
+            result.append(
+                {
+                    "keyword": item["keyword"],
+                    "type": item["type"],
+                    "tip": item["tip"],
+                    "category": cat,
+                    "rank": idx + 1,
+                    "hots": max(95 - idx * 4, 30),
+                    "trend": "up" if idx < 3 else "stable",
+                }
+            )
 
     result.sort(key=lambda x: -x["hots"])
     for i, r in enumerate(result):

@@ -39,16 +39,13 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: uv sync --frozen --no-dev
-
-      - name: Install dev dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --extra dev
 
       - name: Run ruff check
-        run: uv run ruff check src/ tests/
+        run: uv run --frozen --extra dev ruff check src/ tests/
 
       - name: Run ruff format check
-        run: uv run ruff format --check src/ tests/
+        run: uv run --frozen --extra dev ruff format --check src/ tests/
 
   # ===== 2. Test（单元测试 + 集成测试）=====
   test:
@@ -84,19 +81,19 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --extra dev
 
       - name: Generate demo data
         run: |
           # 创建 .env 用于 generate_data.py
           echo "OPENAI_API_KEY=ci-test-key" > .env
           echo "OPENAI_BASE_URL=https://api.siliconflow.cn/v1" >> .env
-          uv run python generate_data.py
+          uv run --frozen --extra dev python generate_data.py
         continue-on-error: true
 
       - name: Run tests
         run: |
-          uv run pytest tests/ \
+          uv run --frozen --extra dev pytest tests/ \
             -v \
             --tb=short \
             --timeout=60 \

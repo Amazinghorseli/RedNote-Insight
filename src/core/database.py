@@ -12,18 +12,18 @@ database.py — PostgreSQL + pgvector 异步数据库层
 """
 
 import uuid
+from collections.abc import AsyncGenerator
 from datetime import datetime
-from typing import AsyncGenerator, Optional
 
-from sqlalchemy import Column, String, Text, DateTime, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import Column, DateTime, Index, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
 from sqlalchemy.orm import declarative_base
-from pgvector.sqlalchemy import Vector
 
 from src.config import settings
 from src.logger import logger
@@ -33,7 +33,7 @@ Base = declarative_base()
 
 # ===== 引擎 & 会话工厂 =====
 _engine = None
-_session_factory: Optional[async_sessionmaker] = None
+_session_factory: async_sessionmaker | None = None
 
 
 def _get_database_url() -> str:
@@ -85,6 +85,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 # ===== 数据表定义 =====
 
+
 class DocumentTable(Base):
     """文档向量表 — 替代 ChromaDB collection"""
 
@@ -117,14 +118,15 @@ class DocumentTable(Base):
 
 # ===== 数据库初始化 =====
 
+
 async def init_db() -> None:
     """创建所有表和索引（幂等：已存在的表不会重建）"""
     engine = get_engine()
     async with engine.begin() as conn:
         # 确保 pgvector 扩展已启用
-        await conn.run_sync(lambda sync_conn: sync_conn.execute(
-            "CREATE EXTENSION IF NOT EXISTS vector"
-        ))
+        await conn.run_sync(
+            lambda sync_conn: sync_conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+        )
         # 创建所有表
         await conn.run_sync(Base.metadata.create_all)
     logger.info("database_initialized", tables=["documents"])
@@ -139,6 +141,7 @@ async def drop_db() -> None:
 
 
 # ===== 向量操作辅助 =====
+
 
 async def insert_documents(
     session: AsyncSession,
@@ -156,15 +159,17 @@ async def insert_documents(
     """
     rows = []
     for chunk, emb in zip(chunks, embeddings):
-        rows.append(DocumentTable(
-            content=chunk.page_content,
-            metadata_=chunk.metadata,
-            embedding=emb,
-        ))
+        rows.append(
+            DocumentTable(
+                content=chunk.page_content,
+                metadata_=chunk.metadata,
+                embedding=emb,
+            )
+        )
 
     session.add_all(rows)
     await session.flush()
-    logger.info(f"inserted_documents", count=len(rows))
+    logger.info("inserted_documents", count=len(rows))
     return len(rows)
 
 
@@ -197,14 +202,12 @@ async def search_by_vector(
     )
 
     rows = result.fetchall()
-    return [
-        {"content": row[0], "metadata": row[1], "score": float(row[2])}
-        for row in rows
-    ]
+    return [{"content": row[0], "metadata": row[1], "score": float(row[2])} for row in rows]
 
 
 async def get_document_count(session: AsyncSession) -> int:
     """获取文档总数"""
     from sqlalchemy import text
+
     result = await session.execute(text("SELECT COUNT(*) FROM documents"))
     return result.scalar() or 0

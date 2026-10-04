@@ -1,8 +1,12 @@
 """
 test_qa.py — QA 端点测试
 """
+
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 
 class MockAppState:
@@ -14,6 +18,7 @@ class MockAppState:
 @pytest.fixture
 def app():
     from src.api.main import app
+
     app.state.app_state = MockAppState()
     return app
 
@@ -45,3 +50,32 @@ async def test_qa_validates_input(app):
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/api/qa", json={})
         assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "cleaned", "k"),
+    [("收纳盒材质 123", "收纳盒材质", 5), ("收纳盒推荐", "收纳盒推荐", 8)],
+)
+async def test_qa_uses_hybrid_retrieval_without_a_supervisor(monkeypatch, question, cleaned, k):
+    from langchain_core.documents import Document
+
+    from src.api.routes import qa
+
+    document = Document(page_content="收纳盒材质和收纳盒推荐")
+    retriever = SimpleNamespace(ahybrid_search=AsyncMock(return_value=[document]))
+    reranker = SimpleNamespace(arerank=AsyncMock(return_value=[0.9]))
+    llm = SimpleNamespace(ainvoke=AsyncMock(return_value=SimpleNamespace(content="测试回答")))
+    monkeypatch.setattr(qa, "ChatOpenAI", lambda **kwargs: llm)
+
+    response = await qa.run_qa(
+        qa.QARequest(question=question),
+        SimpleNamespace(hybrid_retriever=retriever, reranker=reranker),
+    )
+
+    assert response.success is True
+    assert response.question == question
+    assert response.answer == "测试回答"
+    retriever.ahybrid_search.assert_awaited_once_with(cleaned, k=k, bm25_k=40, final_k=k)
+    reranker.arerank.assert_awaited_once_with(cleaned, [document])
+    llm.ainvoke.assert_awaited_once()

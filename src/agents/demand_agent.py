@@ -3,14 +3,14 @@ demand_agent.py - 需求聚合智能体
 将 CommentAnalyzer 输出的多条评论分析结果进行聚合统计，
 找出高频投诉、热门需求、品牌竞争格局等可行动的信号。
 """
+
 from collections import Counter
-from typing import List, Dict, Any
 
 
 class DemandAggregator:
     """聚合多个文档的评论数据，提取高价值需求信号"""
 
-    def aggregate(self, analyses: List[dict]) -> dict:
+    def aggregate(self, analyses: list[dict]) -> dict:
         """
         输入：CommentAnalyzer 输出的分析结果列表
         输出：聚合后的需求洞察 + 电商选品评分
@@ -56,7 +56,6 @@ class DemandAggregator:
         total_cost = 0
         total_weight = 0.0
         profit_margins = []
-        logistics_scores = []
         competition_levels = []
         entry_difficulties = []
         differentiation_ops = []
@@ -119,37 +118,46 @@ class DemandAggregator:
             price_cost_ratio = avg_price / avg_cost
         else:
             price_cost_ratio = 3.0
-        profit_score = min(100, int(
-            min(price_cost_ratio / 5, 1.0) * 40 +      # 定价倍率 满分40
-            min(avg_margin / 0.7, 1.0) * 40 +          # 利润率 满分40
-            20                                          # 基础分
-        ))
+        profit_score = min(
+            100,
+            int(
+                min(price_cost_ratio / 5, 1.0) * 40  # 定价倍率 满分40
+                + min(avg_margin / 0.7, 1.0) * 40  # 利润率 满分40
+                + 20  # 基础分
+            ),
+        )
 
         # 2️⃣ 物流友好度评分
-        logistics_score = min(100, int(
-            (avg_weight < 0.3) * 30 +                   # 轻量
-            (avg_weight < 1.0) * 15 +                   # 不太重
-            35 +                                         # 基础分
-            (competition_levels.count("高") < n * 0.5) * 10  # 偏低竞争加分
-        ))
+        logistics_score = min(
+            100,
+            int(
+                (avg_weight < 0.3) * 30  # 轻量
+                + (avg_weight < 1.0) * 15  # 不太重
+                + 35  # 基础分
+                + (competition_levels.count("高") < n * 0.5) * 10  # 偏低竞争加分
+            ),
+        )
 
         # 3️⃣ 竞争强度评分（分越高越推荐进入）
         low_comp_ratio = competition_levels.count("低") / max(n, 1)
         easy_entry_ratio = entry_difficulties.count("低") / max(n, 1)
         brand_count = len(all_brands)
-        competition_score = min(100, int(
-            low_comp_ratio * 40 +                       # 低竞争占比
-            easy_entry_ratio * 30 +                     # 低进入门槛
-            min((5 - brand_count) * 5, 20) +            # 品牌少=机会大
-            10                                           # 基础分
-        ))
+        competition_score = min(
+            100,
+            int(
+                low_comp_ratio * 40  # 低竞争占比
+                + easy_entry_ratio * 30  # 低进入门槛
+                + min((5 - brand_count) * 5, 20)  # 品牌少=机会大
+                + 10  # 基础分
+            ),
+        )
 
         # 4️⃣ 综合选品评分 (加权)
         selection_score = int(
-            profit_score * 0.30 +                        # 利润权重 30%
-            logistics_score * 0.20 +                     # 物流权重 20%
-            competition_score * 0.20 +                   # 竞争权重 20%
-            demand_score * 0.30                          # 需求权重 30%
+            profit_score * 0.30  # 利润权重 30%
+            + logistics_score * 0.20  # 物流权重 20%
+            + competition_score * 0.20  # 竞争权重 20%
+            + demand_score * 0.30  # 需求权重 30%
         )
 
         # 5️⃣ 差异化方向（去重取前5）
@@ -167,7 +175,6 @@ class DemandAggregator:
             "total_ask_link": total_ask,
             "avg_likes": round(avg_likes, 1),
             "demand_score": demand_score,
-
             # 电商选品评分
             "avg_price": round(avg_price, 1),
             "avg_cost": round(avg_cost, 1),
@@ -194,7 +201,6 @@ class DemandAggregator:
             "total_ask_link": 0,
             "avg_likes": 0,
             "demand_score": 0,
-
             "avg_price": 0,
             "avg_cost": 0,
             "avg_profit_margin": 0,

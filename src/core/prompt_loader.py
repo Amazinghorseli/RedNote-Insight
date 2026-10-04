@@ -13,10 +13,7 @@ prompt_loader.py — Prompt YAML 加载器
 """
 
 import os
-import re
 from pathlib import Path
-from functools import lru_cache
-from typing import Optional
 
 import yaml
 from langchain_core.prompts import ChatPromptTemplate
@@ -27,7 +24,7 @@ from src.logger import logger
 class PromptLoader:
     """从 YAML 文件加载 Prompt 模板"""
 
-    def __init__(self, prompts_dir: Optional[str] = None):
+    def __init__(self, prompts_dir: str | None = None):
         if prompts_dir is None:
             # 默认路径：src/prompts/
             prompts_dir = os.path.join(
@@ -69,20 +66,22 @@ class PromptLoader:
 
         path = self._get_prompt_path(name, version)
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         system = data.get("system", "")
         human = data.get("human", "")
 
-        template = ChatPromptTemplate.from_messages([
-            ("system", system.strip()),
-            ("human", human.strip()),
-        ])
+        template = ChatPromptTemplate.from_messages(
+            [
+                ("system", system.strip()),
+                ("human", human.strip()),
+            ]
+        )
 
         self._cache[cache_key] = template
         logger.info(
-            f"prompt_loaded",
+            "prompt_loaded",
             name=name,
             version=version,
             path=str(path),
@@ -92,7 +91,7 @@ class PromptLoader:
     def load_raw(self, name: str, version: str = "v1") -> dict:
         """加载原始 YAML 数据（不包装为 ChatPromptTemplate）"""
         path = self._get_prompt_path(name, version)
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return yaml.safe_load(f)
 
     def list_prompts(self) -> list[dict]:
@@ -103,20 +102,22 @@ class PromptLoader:
 
         for path in sorted(self.prompts_dir.glob("*.yaml")):
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     data = yaml.safe_load(f)
-                prompts.append({
-                    "name": data.get("name", path.stem),
-                    "version": data.get("version", "unknown"),
-                    "description": data.get("description", ""),
-                    "file": path.name,
-                })
+                prompts.append(
+                    {
+                        "name": data.get("name", path.stem),
+                        "version": data.get("version", "unknown"),
+                        "description": data.get("description", ""),
+                        "file": path.name,
+                    }
+                )
             except Exception:
                 continue
 
         return prompts
 
-    def invalidate_cache(self, name: Optional[str] = None):
+    def invalidate_cache(self, name: str | None = None):
         """清除缓存（用于热重载）"""
         if name is None:
             self._cache.clear()
@@ -133,7 +134,7 @@ class PromptLoader:
 
 
 # ── 单例 ──────────────────────────────────────────
-_global_loader: Optional[PromptLoader] = None
+_global_loader: PromptLoader | None = None
 
 
 def get_prompt_loader() -> PromptLoader:

@@ -14,10 +14,11 @@ state.py — 生产级 AppState 容器
     await state.initialize()
     await state.rebuild_indexes()
 """
-import os
+
 import asyncio
+import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Optional, Callable
 
 from src.config import settings
 from src.logger import logger
@@ -35,7 +36,7 @@ class AppState:
     chunks: list = field(default_factory=list)
     bm25: any = None
     hybrid_retriever: any = None
-    bm25_search: Optional[Callable] = None
+    bm25_search: Callable | None = None
     reranker: any = None
 
     # --- 路径 ---
@@ -45,22 +46,24 @@ class AppState:
     # --- 生命周期 ---
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _initialized: bool = False
-    _error: Optional[str] = None
+    _error: str | None = None
     _use_pg: bool = False  # True=PG+pgvector, False=ChromaDB
 
     # --- 统计 ---
-    stats: dict = field(default_factory=lambda: {
-        "categories": [],
-        "total_notes": 0,
-        "total_chunks": 0,
-    })
+    stats: dict = field(
+        default_factory=lambda: {
+            "categories": [],
+            "total_notes": 0,
+            "total_chunks": 0,
+        }
+    )
 
     @property
     def is_ready(self) -> bool:
         return self._initialized and not self._error
 
     @property
-    def error(self) -> Optional[str]:
+    def error(self) -> str | None:
         return self._error
 
     async def initialize(self) -> None:
@@ -81,16 +84,18 @@ class AppState:
     async def rebuild_indexes(self) -> None:
         """增量入库 + 重建 BM25/Hybrid/Graph 索引"""
         async with self._lock:
+            import jieba
+            from rank_bm25 import BM25Okapi
+
             from src.ingestion import incremental_ingest, rebuild_all_chunks
             from src.retrievers import HybridRetriever, PgHybridRetriever
-            from rank_bm25 import BM25Okapi
-            import jieba
 
             logger.info("[AppState] 重建全量索引...")
 
             if self._use_pg:
                 # PG 增量入库
                 from src.ingestion import incremental_ingest_to_pg
+
                 await incremental_ingest_to_pg(self.raw_dir)
             else:
                 # ChromaDB 增量入库
@@ -108,7 +113,10 @@ class AppState:
 
             def bms(q, k=3):
                 scores = bm25.get_scores(list(jieba.cut(q)))
-                return [chunks[i] for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]]
+                return [
+                    chunks[i]
+                    for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
+                ]
 
             self.chunks = chunks
             self.bm25 = bm25
@@ -119,10 +127,16 @@ class AppState:
 
     async def _do_initialize(self) -> None:
         """实际初始化逻辑：优先 PG，回退 ChromaDB"""
-        from src.ingestion import rebuild_all_chunks, load_vectorstore
-        from src.retrievers import HybridRetriever, APIReranker, create_pg_vectorstore, PgHybridRetriever
-        from rank_bm25 import BM25Okapi
         import jieba
+        from rank_bm25 import BM25Okapi
+
+        from src.ingestion import load_vectorstore, rebuild_all_chunks
+        from src.retrievers import (
+            APIReranker,
+            HybridRetriever,
+            PgHybridRetriever,
+            create_pg_vectorstore,
+        )
 
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.raw_dir = os.path.join(project_root, "data", "raw")
@@ -130,8 +144,11 @@ class AppState:
 
         loop = asyncio.get_running_loop()
 
-        raw_files = [f for f in os.listdir(self.raw_dir) if f.endswith((".txt", ".md"))] \
-            if os.path.exists(self.raw_dir) else []
+        raw_files = (
+            [f for f in os.listdir(self.raw_dir) if f.endswith((".txt", ".md"))]
+            if os.path.exists(self.raw_dir)
+            else []
+        )
         if not raw_files:
             self._error = "暂无数据，请用 generate_data.py 生成数据后刷新"
             return
@@ -153,6 +170,7 @@ class AppState:
                     # PG 可用但为空，写入数据
                     logger.info("pg_empty, ingesting...")
                     from src.ingestion import ingest_to_pg
+
                     await ingest_to_pg(self.raw_dir)
                     pg_store = await create_pg_vectorstore()
                     if pg_store:
@@ -170,10 +188,13 @@ class AppState:
             if os.path.exists(chroma_db_file):
                 vectorstore = await loop.run_in_executor(None, load_vectorstore)
             else:
-                from src.ingestion import load_raw_documents, chunk_documents, build_vectorstore
+                from src.ingestion import build_vectorstore, chunk_documents, load_raw_documents
+
                 docs = load_raw_documents()
                 chunks_for_build = chunk_documents(docs)
-                vectorstore = await loop.run_in_executor(None, lambda: build_vectorstore(chunks_for_build))
+                vectorstore = await loop.run_in_executor(
+                    None, lambda: build_vectorstore(chunks_for_build)
+                )
             logger.info("using_chromadb_vectorstore")
 
         # ===== 构建 BM25 + Hybrid + Graph =====
@@ -183,7 +204,7 @@ class AppState:
         if self._use_pg:
             hr = PgHybridRetriever(vectorstore, chunks)  # PG 版
         else:
-            hr = HybridRetriever(vectorstore, chunks)     # ChromaDB 版
+            hr = HybridRetriever(vectorstore, chunks)  # ChromaDB 版
 
         def bm25_search(query: str, k: int = 3):
             tokenized_query = list(jieba.cut(query))
@@ -200,8 +221,11 @@ class AppState:
 
     def _refresh_stats(self) -> None:
         categories = list(set(d.metadata.get("category", "未分类") for d in self.chunks))
-        raw_files = [f for f in os.listdir(self.raw_dir) if f.endswith((".txt", ".md"))] \
-            if os.path.exists(self.raw_dir) else []
+        raw_files = (
+            [f for f in os.listdir(self.raw_dir) if f.endswith((".txt", ".md"))]
+            if os.path.exists(self.raw_dir)
+            else []
+        )
         self.stats = {
             "categories": categories,
             "total_notes": len(raw_files),
@@ -238,4 +262,3 @@ async def init_app_state() -> AppState:
     state = AppState()
     await state.initialize()
     return state
-

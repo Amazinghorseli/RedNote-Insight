@@ -3,13 +3,14 @@ retrievers.py - 混合检索 + 重排序
 合并自原 step03_hybrid_retriever + step04_reranker
 支持 ChromaDB（默认）和 PostgreSQL + pgvector（可选）双模式
 """
+
 import asyncio
 
-from src.logger import logger
-from typing import List, Optional
-from rank_bm25 import BM25Okapi
-from langchain_core.documents import Document
 import jieba
+from langchain_core.documents import Document
+from rank_bm25 import BM25Okapi
+
+from src.logger import logger
 
 
 class HybridRetriever:
@@ -131,6 +132,7 @@ class APIReranker:
 
     def __init__(self, model: str = None, api_key: str = None, base_url: str = None):
         from src.config import RERANKER_CONFIG
+
         cfg = RERANKER_CONFIG
         self.model = model or cfg["model"]
         self.api_key = api_key or cfg["api_key"]
@@ -151,9 +153,7 @@ class APIReranker:
             "Content-Type": "application/json",
         }
 
-        resp = requests.post(
-            f"{self.base_url}/rerank", headers=headers, json=payload, timeout=30
-        )
+        resp = requests.post(f"{self.base_url}/rerank", headers=headers, json=payload, timeout=30)
         resp.raise_for_status()
         data = resp.json()
 
@@ -184,9 +184,7 @@ class APIReranker:
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{self.base_url}/rerank", headers=headers, json=payload
-            )
+            resp = await client.post(f"{self.base_url}/rerank", headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
 
@@ -200,6 +198,7 @@ class APIReranker:
 # ================================================================
 # PostgreSQL + pgvector 向量检索
 # ================================================================
+
 
 class PGVectorStore:
     """PostgreSQL + pgvector 向量存储适配器
@@ -215,18 +214,18 @@ class PGVectorStore:
     def __init__(self, embedding_model=None):
         if embedding_model is None:
             from src.ingestion import get_embeddings
+
             self.embedding_model = get_embeddings()
         else:
             self.embedding_model = embedding_model
 
-    async def similarity_search(
-        self, query: str, k: int = 5
-    ) -> list[Document]:
+    async def similarity_search(self, query: str, k: int = 5) -> list[Document]:
         """向量相似度搜索（返回 Document 对象）"""
-        from src.core.database import get_db, search_by_vector
-
         # 1. Embed 查询
         import asyncio as _asyncio
+
+        from src.core.database import get_db, search_by_vector
+
         loop = _asyncio.get_running_loop()
         query_embedding = await loop.run_in_executor(
             None, lambda: self.embedding_model.embed_query(query)
@@ -251,9 +250,10 @@ class PGVectorStore:
         self, query: str, k: int = 5
     ) -> list[tuple[Document, float]]:
         """向量相似度搜索（带分数）"""
+        import asyncio as _asyncio
+
         from src.core.database import get_db, search_by_vector
 
-        import asyncio as _asyncio
         loop = _asyncio.get_running_loop()
         query_embedding = await loop.run_in_executor(
             None, lambda: self.embedding_model.embed_query(query)
@@ -275,6 +275,7 @@ class PGVectorStore:
     async def count(self) -> int:
         """获取文档总数"""
         from src.core.database import get_db, get_document_count
+
         async for session in get_db():
             return await get_document_count(session)
         return 0
@@ -348,13 +349,13 @@ class PgHybridRetriever:
         return [doc_map[rid] for rid in ranked_ids if rid in doc_map]
 
 
-async def create_pg_vectorstore() -> Optional[PGVectorStore]:
+async def create_pg_vectorstore() -> PGVectorStore | None:
     """尝试创建 PG 向量存储（如果 PG 可用）
 
     返回 None 表示 PG 不可用，应回退到 ChromaDB。
     """
     try:
-        from src.core.database import init_db, get_db, get_document_count
+        from src.core.database import get_db, get_document_count, init_db
 
         await init_db()
 

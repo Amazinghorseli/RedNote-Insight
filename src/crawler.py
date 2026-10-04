@@ -4,13 +4,11 @@ crawler.py — 真实数据抓取接口
 基于 DrissionPage 的真实小红书爬虫封装。
 当知识库中没有用户查询的品类数据时，自动打开浏览器抓取真实笔记和评论。
 """
-import os
-import json
-import random
 
 # ============================================================
 # 统一入口
 # ============================================================
+
 
 class CrawlerInterface:
     """
@@ -27,6 +25,7 @@ class CrawlerInterface:
 
         try:
             from src.real_crawler import XHSCrawler
+
             self._crawler = XHSCrawler(cookies_json=cookies_json)
             self._is_cloud = self._crawler.is_cloud_mode
             if self._crawler.is_logged_in:
@@ -36,7 +35,10 @@ class CrawlerInterface:
                 if self._is_cloud:
                     print("[Crawler] [Cloud] 云端未登录。请在 Streamlit Secrets 中配置 XHS_COOKIES")
                 else:
-                    print("[Crawler] [WARN] 本地未登录。运行: uv run python src/real_crawler.py \"品类名\" 登录")
+                    print(
+                        "[Crawler] [WARN] 本地未登录。运行: "
+                        'uv run python src/real_crawler.py "品类名" 登录'
+                    )
         except Exception as e:
             self._init_error = str(e)
             print(f"[Crawler] [FAIL] 爬虫初始化失败: {e}")
@@ -91,15 +93,19 @@ class CrawlerInterface:
                 return {
                     "method": "error",
                     "count": 0,
-                    "error": "未登录。请在本地运行 `uv run python scripts/export_cookies.py` 导出 cookie，然后粘贴到 Streamlit Secrets → XHS_COOKIES"
+                    "error": "未登录。请在本地运行 `uv run python scripts/export_cookies.py` "
+                    "导出 cookie，然后粘贴到 Streamlit Secrets → XHS_COOKIES",
                 }
             return {
                 "method": "error",
                 "count": 0,
-                "error": "未登录小红书。请先在命令行运行: uv run python src/real_crawler.py \"品类名\" 完成登录"
+                "error": "未登录小红书。请先在命令行运行: "
+                'uv run python src/real_crawler.py "品类名" 完成登录',
             }
 
-        saved = self._crawler.crawl(category, count=count, with_comments=True, comment_level=comment_level)
+        saved = self._crawler.crawl(
+            category, count=count, with_comments=True, comment_level=comment_level
+        )
         return {
             "method": "real",
             "count": saved,
@@ -116,10 +122,12 @@ class CrawlerInterface:
         if not self._crawler:
             print(f"[Crawler] 爬虫不可用，使用兜底热榜: {self._init_error}")
             from src.real_crawler import XHSCrawler
+
             return XHSCrawler._fallback_hot_list()
         try:
             return self._crawler.fetch_hot_search(max_items=max_items)
         except Exception as e:
             print(f"[Crawler] 热榜抓取失败: {e}")
             from src.real_crawler import XHSCrawler
+
             return XHSCrawler._fallback_hot_list()

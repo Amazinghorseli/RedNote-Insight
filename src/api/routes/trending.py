@@ -8,17 +8,15 @@ Endpoints:
   GET  /api/trending          → 热门搜索词排行
   GET  /api/trending/refresh  → 触发爬虫刷新热词数据
 """
-import os
-import re
-import json
-import random
-import asyncio
-from pathlib import Path
-from typing import Optional
-from datetime import datetime, timedelta
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+import asyncio
+import json
+import os
+import random
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from fastapi import APIRouter
 
 from src.config import RAW_DIR
 
@@ -26,8 +24,11 @@ router = APIRouter(prefix="/api/trending", tags=["trending"])
 
 
 # ===== 热词缓存文件 =====
-TRENDING_CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
-                               "data", "trending_cache.json")
+TRENDING_CACHE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
+    "data",
+    "trending_cache.json",
+)
 
 
 # ===== 热门选品词库（按品类分类） =====
@@ -41,38 +42,33 @@ HOT_KEYWORDS = [
     {"keyword": "盲盒", "category": "潮玩", "trend": "up", "hots": 0},
     {"keyword": "手机壳", "category": "数码", "trend": "stable", "hots": 0},
     {"keyword": "蓝牙耳机", "category": "数码", "trend": "stable", "hots": 0},
-
     # 👗 服饰
     {"keyword": "健身服", "category": "服饰", "trend": "up", "hots": 0},
     {"keyword": "风衣", "category": "服饰", "trend": "seasonal", "hots": 0},
     {"keyword": "瑜伽裤", "category": "服饰", "trend": "up", "hots": 0},
     {"keyword": "冲锋衣", "category": "服饰", "trend": "up", "hots": 0},
-
     # 🍜 食品
     {"keyword": "辣条", "category": "食品", "trend": "stable", "hots": 0},
     {"keyword": "养生茶", "category": "食品", "trend": "up", "hots": 0},
     {"keyword": "即食早餐", "category": "食品", "trend": "up", "hots": 0},
-
     # 💄 美妆个护
     {"keyword": "素颜霜", "category": "美妆", "trend": "up", "hots": 0},
     {"keyword": "护发精油", "category": "个护", "trend": "up", "hots": 0},
     {"keyword": "补水面膜", "category": "美妆", "trend": "stable", "hots": 0},
-
     # 🐱 宠物
     {"keyword": "猫粮", "category": "宠物", "trend": "up", "hots": 0},
     {"keyword": "宠物玩具", "category": "宠物", "trend": "up", "hots": 0},
-
     # 🔧 其他热门
     {"keyword": "健身器材", "category": "运动", "trend": "stable", "hots": 0},
     {"keyword": "茶杯", "category": "家居", "trend": "stable", "hots": 0},
 ]
 
 
-def _load_cache() -> Optional[dict]:
+def _load_cache() -> dict | None:
     """加载热词缓存"""
     if os.path.exists(TRENDING_CACHE):
         try:
-            with open(TRENDING_CACHE, "r", encoding="utf-8") as f:
+            with open(TRENDING_CACHE, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return None
@@ -94,10 +90,17 @@ def _estimate_hots_from_notes(category: str) -> int:
 
     # 找品类前缀
     prefix_map = {
-        "磁吸感应灯": "cixi", "健身服": "健身", "风衣": "风衣",
-        "辣条": "辣条", "茶杯": "茶杯", "桌面收纳": "dorm",
-        "盲盒": "box", "装饰画": "deco", "香薰": "scent",
-        "收纳盒": "store", "健身器材": "选健",
+        "磁吸感应灯": "cixi",
+        "健身服": "健身",
+        "风衣": "风衣",
+        "辣条": "辣条",
+        "茶杯": "茶杯",
+        "桌面收纳": "dorm",
+        "盲盒": "box",
+        "装饰画": "deco",
+        "香薰": "scent",
+        "收纳盒": "store",
+        "健身器材": "选健",
     }
     prefix = prefix_map.get(category)
     if not prefix:
@@ -128,22 +131,26 @@ def _generate_trending(refresh: bool = False) -> list:
     items = []
     for kw in HOT_KEYWORDS:
         hots = _estimate_hots_from_notes(kw["keyword"])
-        items.append({
-            "keyword": kw["keyword"],
-            "category": kw["category"],
-            "trend": kw["trend"],
-            "hots": hots,
-            "has_data": hots > 0,
-        })
+        items.append(
+            {
+                "keyword": kw["keyword"],
+                "category": kw["category"],
+                "trend": kw["trend"],
+                "hots": hots,
+                "has_data": hots > 0,
+            }
+        )
 
     # 按热度排序
     items.sort(key=lambda x: x["hots"], reverse=True)
 
     # 缓存
-    _save_cache({
-        "updated_at": now.isoformat(),
-        "items": items,
-    })
+    _save_cache(
+        {
+            "updated_at": now.isoformat(),
+            "items": items,
+        }
+    )
 
     return items
 
@@ -152,6 +159,7 @@ async def _trigger_crawl_for_keyword(keyword: str) -> bool:
     """触发爬虫抓取关键词数据"""
     try:
         from src.crawler import CrawlerInterface
+
         crawler = CrawlerInterface(raw_dir=str(RAW_DIR))
         if not crawler.is_available:
             return False
